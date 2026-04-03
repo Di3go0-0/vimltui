@@ -1,5 +1,5 @@
 use super::VimEditor;
-use crate::{Register, VimMode, VisualKind};
+use crate::{Register, VimMode, VisualKind, YankHighlight};
 
 impl VimEditor {
     /// Enter visual mode
@@ -195,6 +195,20 @@ impl VimEditor {
             // Always copy to system clipboard
             self.copy_to_system_clipboard(&self.unnamed_register.content.clone());
             self.use_system_clipboard = false;
+
+            // Set yank highlight before exiting visual (we need the range)
+            if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+                let linewise = matches!(kind, VisualKind::Line);
+                self.yank_highlight = Some(YankHighlight {
+                    start_row: sr,
+                    start_col: sc,
+                    end_row: er,
+                    end_col: ec,
+                    linewise,
+                    created_at: std::time::Instant::now(),
+                });
+            }
+
             self.exit_visual();
         }
     }

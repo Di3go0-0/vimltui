@@ -6,7 +6,7 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthStr;
 
 use crate::editor::VimEditor;
-use crate::{SyntaxHighlighter, VimMode, VimTheme, VisualKind};
+use crate::{SyntaxHighlighter, VimMode, VimTheme, VisualKind, YankHighlight};
 
 /// Visual selection range: ((start_row, start_col), (end_row, end_col))
 type VisualRange = Option<((usize, usize), (usize, usize))>;
@@ -79,6 +79,16 @@ pub fn render_with_options(
         VimMode::Visual(k) => Some(k.clone()),
         _ => None,
     };
+
+    // Clear expired yank highlight
+    if editor
+        .yank_highlight
+        .as_ref()
+        .is_some_and(|h| h.is_expired())
+    {
+        editor.yank_highlight = None;
+    }
+    let yank_highlight = editor.yank_highlight.clone();
 
     // Render lines -- each line is padded to full widget width to prevent ghosting
     let line_count_width = format!("{}", editor.lines.len()).len().max(3);
@@ -160,8 +170,13 @@ pub fn render_with_options(
         let search_pattern = &editor.search.pattern;
         let has_search = !search_pattern.is_empty();
 
+        // Check if this line has yank highlight
+        let line_yank = compute_line_yank(line_idx, render_text.len(), &yank_highlight);
+
         if let Some((vis_start, vis_end)) = line_visual {
             render_line_with_visual(render_text, vis_start, vis_end, theme, highlighter, &mut spans);
+        } else if let Some((ys, ye)) = line_yank {
+            render_line_with_yank(render_text, ys, ye, theme, highlighter, &mut spans);
         } else if has_search {
             render_line_with_search(
                 render_text, line_idx, editor.cursor_row, editor.cursor_col,
@@ -362,6 +377,61 @@ fn render_line_with_search<'a>(
     // Render remaining text after last match
     if pos < line.len() {
         highlighter.highlight_segment(&line[pos..], spans);
+    }
+}
+
+fn compute_line_yank(
+    line_idx: usize,
+    line_len: usize,
+    yank_highlight: &Option<YankHighlight>,
+) -> Option<(usize, usize)> {
+    let h = yank_highlight.as_ref()?;
+
+    if line_idx < h.start_row || line_idx > h.end_row {
+        return None;
+    }
+
+    if h.linewise {
+        return Some((0, line_len));
+    }
+
+    // Character-wise yank highlight
+    if h.start_row == h.end_row {
+        Some((h.start_col, h.end_col.min(line_len)))
+    } else if line_idx == h.start_row {
+        Some((h.start_col, line_len))
+    } else if line_idx == h.end_row {
+        Some((0, (h.end_col + 1).min(line_len)))
+    } else {
+        Some((0, line_len))
+    }
+}
+
+fn render_line_with_yank<'a>(
+    line: &'a str,
+    yank_start: usize,
+    yank_end: usize,
+    theme: &VimTheme,
+    highlighter: &dyn SyntaxHighlighter,
+    spans: &mut Vec<Span<'a>>,
+) {
+    let yank_style = Style::default().bg(theme.yank_highlight_bg);
+
+    let len = line.len();
+    let ys = yank_start.min(len);
+    let ye = yank_end.min(len);
+
+    if ys > 0 {
+        highlighter.highlight_segment(&line[..ys], spans);
+    }
+    if ys < ye {
+        spans.push(Span::styled(&line[ys..ye], yank_style));
+    }
+    if ye < len {
+        highlighter.highlight_segment(&line[ye..], spans);
+    }
+    if line.is_empty() {
+        spans.push(Span::styled(" ", yank_style));
     }
 }
 

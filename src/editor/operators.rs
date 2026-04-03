@@ -1,6 +1,6 @@
 use super::VimEditor;
 use super::motions::Motion;
-use crate::{Operator, Register};
+use crate::{Operator, Register, YankHighlight};
 
 impl VimEditor {
     /// Execute operator + motion combination
@@ -150,6 +150,15 @@ impl VimEditor {
 
         // Always copy to system clipboard
         self.copy_to_system_clipboard(&self.unnamed_register.content.clone());
+
+        self.yank_highlight = Some(YankHighlight {
+            start_row,
+            start_col,
+            end_row,
+            end_col,
+            linewise,
+            created_at: std::time::Instant::now(),
+        });
     }
 
     fn op_indent(&mut self, start_row: usize, end_row: usize) {

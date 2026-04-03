@@ -211,6 +211,26 @@ pub struct EditRecord {
     pub keys: Vec<KeyEvent>,
 }
 
+/// Temporary highlight for yanked text (like Neovim's `vim.highlight.on_yank()`).
+#[derive(Debug, Clone)]
+pub struct YankHighlight {
+    pub start_row: usize,
+    pub start_col: usize,
+    pub end_row: usize,
+    pub end_col: usize,
+    pub linewise: bool,
+    pub created_at: std::time::Instant,
+}
+
+impl YankHighlight {
+    /// Duration the highlight stays visible.
+    const DURATION_MS: u128 = 150;
+
+    pub fn is_expired(&self) -> bool {
+        self.created_at.elapsed().as_millis() > Self::DURATION_MS
+    }
+}
+
 /// Direction for `f`/`F`/`t`/`T` character find motions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FindDirection {
@@ -240,6 +260,8 @@ pub struct VimTheme {
     pub search_current_bg: Color,
     /// Foreground for search match text.
     pub search_match_fg: Color,
+    /// Background for yank highlight flash.
+    pub yank_highlight_bg: Color,
 }
 
 /// Trait for language-specific syntax highlighting.

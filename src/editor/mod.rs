@@ -5,7 +5,8 @@ pub mod search;
 pub mod visual;
 
 use crate::{
-    EditRecord, FindDirection, Operator, Register, SearchState, Snapshot, VimMode, VimModeConfig, SCROLLOFF,
+    EditRecord, FindDirection, Operator, Register, SearchState, Snapshot, VimMode, VimModeConfig,
+    YankHighlight, SCROLLOFF,
 };
 
 /// A self-contained Vim editor instance with its own buffer, cursor, mode, and state.
@@ -48,6 +49,9 @@ pub struct VimEditor {
     pub recording_edit: Vec<crossterm::event::KeyEvent>,
     pub is_recording: bool,
 
+    // Yank highlight
+    pub yank_highlight: Option<YankHighlight>,
+
     // Status
     pub modified: bool,
     pub command_line: String,
@@ -89,6 +93,7 @@ impl VimEditor {
             last_edit: None,
             recording_edit: Vec::new(),
             is_recording: false,
+            yank_highlight: None,
             modified: false,
             command_line: String::new(),
             command_active: false,
