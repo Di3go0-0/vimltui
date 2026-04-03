@@ -270,11 +270,17 @@ impl VimEditor {
     pub fn insert_newline(&mut self) {
         if self.cursor_row < self.lines.len() {
             let col = self.cursor_col.min(self.lines[self.cursor_row].len());
+            let indent = {
+                let line = &self.lines[self.cursor_row];
+                let trimmed = line.trim_start();
+                line[..line.len() - trimmed.len()].to_string()
+            };
             let rest = self.lines[self.cursor_row][col..].to_string();
             self.lines[self.cursor_row].truncate(col);
             self.cursor_row += 1;
-            self.lines.insert(self.cursor_row, rest);
-            self.cursor_col = 0;
+            self.lines
+                .insert(self.cursor_row, format!("{}{}", indent, rest));
+            self.cursor_col = indent.len();
             self.modified = true;
         }
     }
