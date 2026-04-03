@@ -677,15 +677,21 @@ impl VimEditor {
                 EditorAction::Handled
             }
             KeyCode::Char('p') => {
-                self.save_undo();
-                self.paste_from_system_clipboard();
-                self.use_system_clipboard = false;
+                if self.use_system_clipboard {
+                    self.paste_from_system_clipboard();
+                    self.use_system_clipboard = false;
+                } else {
+                    self.paste_after();
+                }
                 EditorAction::Handled
             }
             KeyCode::Char('P') => {
-                self.save_undo();
-                self.paste_from_system_clipboard();
-                self.use_system_clipboard = false;
+                if self.use_system_clipboard {
+                    self.paste_from_system_clipboard();
+                    self.use_system_clipboard = false;
+                } else {
+                    self.paste_before();
+                }
                 EditorAction::Handled
             }
             KeyCode::Char('~') => {

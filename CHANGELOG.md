@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`a` (append)** — cursor now correctly moves right when at the last character of a line; previously it stayed in place because `move_right()` was called while still in Normal mode, clamping to `line_len - 1`
+- **`p`/`P` (paste)** — now correctly pastes on a new line when the register is linewise (after `yy`, `dd`), and inline when characterwise (after `yw`, `dw`); previously always pasted inline via system clipboard
 
 ### Added
 
