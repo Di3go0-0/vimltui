@@ -62,6 +62,9 @@ pub struct VimEditor {
     // Command mode (:)
     pub command_active: bool,
     pub command_buffer: String,
+
+    // Live substitution preview
+    pub preview_lines: Option<Vec<String>>,
 }
 
 impl VimEditor {
@@ -104,6 +107,7 @@ impl VimEditor {
             command_line: String::new(),
             command_active: false,
             command_buffer: String::new(),
+            preview_lines: None,
         }
     }
 
@@ -470,10 +474,11 @@ impl VimEditor {
     pub fn update_command_line(&mut self) {
         if self.command_active {
             self.command_line = format!(":{}", self.command_buffer);
-            // Live preview: highlight substitution pattern while typing
+            // Live preview: highlight substitution pattern + replacement
             self.search.pattern = self
                 .extract_substitute_pattern()
                 .unwrap_or_default();
+            self.preview_lines = self.compute_substitute_preview();
             return;
         }
         self.command_line = match &self.mode {
@@ -515,17 +520,23 @@ impl VimEditor {
     }
 
     /// Extract the search pattern from a partial substitution command in command_buffer.
-    /// Returns None if the buffer doesn't contain a valid :s pattern.
     fn extract_substitute_pattern(&self) -> Option<String> {
+        let (pattern, _, _, _) = self.extract_substitute_parts()?;
+        Some(pattern)
+    }
+
+    /// Parse partial substitution command, returning (pattern, replacement, range_all, flags).
+    /// Handles incomplete input gracefully (e.g., `:s/hol` without closing delimiter).
+    fn extract_substitute_parts(&self) -> Option<(String, Option<String>, bool, String)> {
         let cmd = self.command_buffer.trim();
 
-        // Strip range prefix (%, N,M)
-        let rest = if cmd.starts_with('%') {
-            &cmd[1..]
+        // Strip range prefix and determine if % (all lines)
+        let (all, rest) = if cmd.starts_with('%') {
+            (true, &cmd[1..])
         } else if let Some(pos) = cmd.find('s') {
             let prefix = &cmd[..pos];
             if prefix.is_empty() || prefix.chars().all(|c| c.is_ascii_digit() || c == ',') {
-                &cmd[pos..]
+                (false, &cmd[pos..])
             } else {
                 return None;
             }
@@ -542,28 +553,104 @@ impl VimEditor {
             return None;
         }
 
-        // Extract pattern between first and second delimiter
+        // Parse: s/pattern/replacement/flags — each part may be incomplete
         let body = &rest[2..];
-        let mut pattern = String::new();
+        let mut parts: Vec<String> = Vec::new();
+        let mut current = String::new();
         let mut chars = body.chars().peekable();
         while let Some(c) = chars.next() {
             if c == '\\' {
                 if let Some(&next) = chars.peek() {
                     if next == delim {
-                        pattern.push(next);
+                        current.push(next);
                         chars.next();
                         continue;
                     }
                 }
-                pattern.push(c);
+                current.push(c);
             } else if c == delim {
-                break;
+                parts.push(current.clone());
+                current.clear();
             } else {
-                pattern.push(c);
+                current.push(c);
             }
         }
 
-        if pattern.is_empty() { None } else { Some(pattern) }
+        let pattern = if let Some(p) = parts.first() {
+            if p.is_empty() { return None; }
+            p.clone()
+        } else if !current.is_empty() {
+            // Still typing the pattern (no closing delimiter yet)
+            return Some((current, None, all, String::new()));
+        } else {
+            return None;
+        };
+
+        let replacement = if parts.len() >= 2 {
+            Some(parts[1].clone())
+        } else if !current.is_empty() {
+            // Still typing the replacement
+            Some(current.clone())
+        } else {
+            // Just closed the pattern delimiter, replacement is empty so far
+            Some(String::new())
+        };
+
+        let flags = if parts.len() >= 3 {
+            parts[2].clone()
+        } else if parts.len() >= 2 {
+            current
+        } else {
+            String::new()
+        };
+
+        Some((pattern, replacement, all, flags))
+    }
+
+    /// Determine if a pattern should be case-insensitive (smartcase):
+    /// all-lowercase → insensitive, any uppercase → sensitive.
+    /// The `i` flag forces insensitive regardless.
+    fn is_smartcase_insensitive(pattern: &str, flags: &str) -> bool {
+        if flags.contains('i') {
+            return true;
+        }
+        // Smartcase: if pattern has no uppercase letters, match case-insensitively
+        !pattern.chars().any(|c| c.is_uppercase())
+    }
+
+    /// Compute preview lines by applying the substitution without modifying the buffer.
+    fn compute_substitute_preview(&self) -> Option<Vec<String>> {
+        let (pattern, replacement, all, flags) = self.extract_substitute_parts()?;
+        let replacement = replacement?;
+
+        let case_insensitive = Self::is_smartcase_insensitive(&pattern, &flags);
+        let global = flags.contains('g');
+
+        let regex_pattern = if case_insensitive {
+            format!("(?i){}", pattern)
+        } else {
+            pattern
+        };
+        let re = regex::Regex::new(&regex_pattern).ok()?;
+
+        let (start, end) = if all {
+            (0, self.lines.len().saturating_sub(1))
+        } else {
+            (self.cursor_row, self.cursor_row)
+        };
+
+        let mut preview = self.lines.clone();
+        for row in start..=end.min(preview.len().saturating_sub(1)) {
+            let line = &self.lines[row];
+            let new_line = if global {
+                re.replace_all(line, replacement.as_str()).to_string()
+            } else {
+                re.replace(line, replacement.as_str()).to_string()
+            };
+            preview[row] = new_line;
+        }
+
+        Some(preview)
     }
 
     // --- System clipboard ---

@@ -96,13 +96,16 @@ pub fn render_with_options(
     let num_col_width = line_count_width + 2; // digits + 2 spaces
     let available_text_width = full_width.saturating_sub(num_col_width);
 
+    // Use preview lines (live substitution) if available, otherwise normal lines
+    let display_lines = editor.preview_lines.as_ref().unwrap_or(&editor.lines);
+
     // Pre-truncate lines that exceed available width so their storage
     // outlives the spans that borrow from them.
     let mut truncated_cache: Vec<Option<String>> = Vec::with_capacity(content_height);
     for screen_row in 0..content_height {
         let line_idx = editor.scroll_offset + screen_row;
-        if line_idx < editor.lines.len() {
-            let line_text = &editor.lines[line_idx];
+        if line_idx < display_lines.len() {
+            let line_text = &display_lines[line_idx];
             let tw = UnicodeWidthStr::width(line_text.as_str());
             if tw > available_text_width {
                 truncated_cache.push(Some(truncate_to_width(line_text, available_text_width)));
@@ -118,7 +121,7 @@ pub fn render_with_options(
 
     for (screen_row, cached) in truncated_cache.iter().enumerate() {
         let line_idx = editor.scroll_offset + screen_row;
-        if line_idx >= editor.lines.len() {
+        if line_idx >= display_lines.len() {
             // Tilde for empty lines past end of file
             let prefix = format!("{:>width$}  ", "~", width = line_count_width);
             let used = prefix.len();
@@ -138,7 +141,7 @@ pub fn render_with_options(
         // Use truncated text if the line exceeds viewport width
         let render_text: &str = match cached {
             Some(t) => t.as_str(),
-            None => editor.lines[line_idx].as_str(),
+            None => display_lines[line_idx].as_str(),
         };
 
         // Relative line numbers (like nvim set relativenumber + number)

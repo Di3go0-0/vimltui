@@ -28,12 +28,17 @@ impl VimEditor {
         if self.search.pattern.is_empty() {
             return;
         }
-        let pattern = self.search.pattern.to_lowercase();
+        let smart_lower = !self.search.pattern.chars().any(|c| c.is_uppercase());
+        let pattern = if smart_lower {
+            self.search.pattern.to_lowercase()
+        } else {
+            self.search.pattern.clone()
+        };
 
         if self.search.forward {
-            self.find_forward(&pattern);
+            self.find_forward(&pattern, smart_lower);
         } else {
-            self.find_backward(&pattern);
+            self.find_backward(&pattern, smart_lower);
         }
     }
 
@@ -42,33 +47,45 @@ impl VimEditor {
         if self.search.pattern.is_empty() {
             return;
         }
-        let pattern = self.search.pattern.to_lowercase();
+        let smart_lower = !self.search.pattern.chars().any(|c| c.is_uppercase());
+        let pattern = if smart_lower {
+            self.search.pattern.to_lowercase()
+        } else {
+            self.search.pattern.clone()
+        };
 
         if self.search.forward {
-            self.find_backward(&pattern);
+            self.find_backward(&pattern, smart_lower);
         } else {
-            self.find_forward(&pattern);
+            self.find_forward(&pattern, smart_lower);
         }
     }
 
-    fn find_forward(&mut self, pattern: &str) {
+    fn line_text<'a>(line: &'a str, case_insensitive: bool, buf: &'a mut String) -> &'a str {
+        if case_insensitive {
+            *buf = line.to_lowercase();
+            buf.as_str()
+        } else {
+            line
+        }
+    }
+
+    fn find_forward(&mut self, pattern: &str, ci: bool) {
         let total = self.lines.len();
-        // Search from cursor position forward, wrapping around
         let start_col = self.cursor_col + 1;
 
-        // Check current line after cursor
-        let line_lower = self.lines[self.cursor_row].to_lowercase();
-        if let Some(pos) = line_lower[start_col.min(line_lower.len())..].find(pattern) {
-            self.cursor_col = start_col.min(line_lower.len()) + pos;
+        let mut buf = String::new();
+        let hay = Self::line_text(&self.lines[self.cursor_row], ci, &mut buf);
+        if let Some(pos) = hay[start_col.min(hay.len())..].find(pattern) {
+            self.cursor_col = start_col.min(hay.len()) + pos;
             self.ensure_cursor_visible();
             return;
         }
 
-        // Check subsequent lines
         for offset in 1..=total {
             let row = (self.cursor_row + offset) % total;
-            let line_lower = self.lines[row].to_lowercase();
-            if let Some(pos) = line_lower.find(pattern) {
+            let hay = Self::line_text(&self.lines[row], ci, &mut buf);
+            if let Some(pos) = hay.find(pattern) {
                 self.cursor_row = row;
                 self.cursor_col = pos;
                 self.ensure_cursor_visible();
@@ -77,13 +94,13 @@ impl VimEditor {
         }
     }
 
-    fn find_backward(&mut self, pattern: &str) {
+    fn find_backward(&mut self, pattern: &str, ci: bool) {
         let total = self.lines.len();
 
-        // Check current line before cursor
         if self.cursor_col > 0 {
-            let line_lower = self.lines[self.cursor_row].to_lowercase();
-            let search_area = &line_lower[..self.cursor_col.min(line_lower.len())];
+            let mut buf = String::new();
+            let hay = Self::line_text(&self.lines[self.cursor_row], ci, &mut buf);
+            let search_area = &hay[..self.cursor_col.min(hay.len())];
             if let Some(pos) = search_area.rfind(pattern) {
                 self.cursor_col = pos;
                 self.ensure_cursor_visible();
@@ -91,11 +108,11 @@ impl VimEditor {
             }
         }
 
-        // Check previous lines
         for offset in 1..=total {
             let row = (self.cursor_row + total - offset) % total;
-            let line_lower = self.lines[row].to_lowercase();
-            if let Some(pos) = line_lower.rfind(pattern) {
+            let mut buf = String::new();
+            let hay = Self::line_text(&self.lines[row], ci, &mut buf);
+            if let Some(pos) = hay.rfind(pattern) {
                 self.cursor_row = row;
                 self.cursor_col = pos;
                 self.ensure_cursor_visible();

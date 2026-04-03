@@ -79,6 +79,7 @@ impl VimEditor {
                 self.command_active = false;
                 self.command_buffer.clear();
                 self.search.pattern.clear();
+                self.preview_lines = None;
                 EditorAction::Handled
             }
             KeyCode::Enter => {
@@ -86,6 +87,7 @@ impl VimEditor {
                 self.command_active = false;
                 self.command_buffer.clear();
                 self.search.pattern.clear();
+                self.preview_lines = None;
                 let action = self.execute_command(&cmd);
                 self.ensure_cursor_visible();
                 action
@@ -94,6 +96,7 @@ impl VimEditor {
                 if self.command_buffer.is_empty() {
                     self.command_active = false;
                     self.search.pattern.clear();
+                    self.preview_lines = None;
                 } else {
                     self.command_buffer.pop();
                 }
@@ -222,8 +225,10 @@ impl VimEditor {
     }
 
     fn execute_substitute(&mut self, sub: SubstituteCmd) {
-        // Build regex
-        let regex_pattern = if sub.case_insensitive {
+        // Build regex with smartcase
+        let case_insensitive = sub.case_insensitive
+            || Self::is_smartcase_insensitive(&sub.pattern, "");
+        let regex_pattern = if case_insensitive {
             format!("(?i){}", sub.pattern)
         } else {
             sub.pattern.clone()
