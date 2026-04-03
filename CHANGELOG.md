@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Live substitution preview** — when typing `:s` or `:%s`, matches highlight in real-time AND the replacement is shown live in the editor (like Neovim's `inccommand`). New `preview_lines` and `preview_highlights` fields on `VimEditor` for custom renderers. Replacement text is visually distinguished with `substitute_preview_bg` theme color.
 - **Smartcase** — search (`/`, `?`, `*`, `#`) and substitution (`:s`) are now case-insensitive when the pattern is all-lowercase, and case-sensitive when it contains any uppercase character. The `i` flag in `:s` still forces case-insensitive.
+- **Replace mode (`R`)** — overwrites characters instead of inserting. Shows `-- REPLACE --` in command line. At end of line, acts as insert. Exit with Esc.
+- **`CursorShape` API** — new `cursor_shape()` method on `VimEditor` returns `Block` (Normal/Visual), `Bar` (Insert), or `Underline` (Replace/pending `r`). Custom renderers can use this to set terminal cursor style.
+- **Visual mode case operations** — `u` (lowercase), `U` (UPPERCASE), `~` (toggle case) on the visual selection. Works with Char, Line, and Block selections.
+- **`g~` operator** — toggle case with motion in normal mode (e.g., `g~w`, `g~$`). Complements existing `gu`/`gU`.
+- **`r` with count** — `5rx` replaces 5 characters with `x`.
+
+### Fixed
+
+- **Preview highlights persisting after `:s` confirm** — `preview_highlights` now clears on Enter and Backspace-exit, not just Esc.
 
 ## [0.1.2] - 2026-04-03
 
