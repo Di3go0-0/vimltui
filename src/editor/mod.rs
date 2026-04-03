@@ -42,7 +42,10 @@ pub struct VimEditor {
     pub pending_register: bool, // waiting for register name after "
     pub use_system_clipboard: bool, // next yank/paste uses system clipboard
     pub pending_find: Option<(FindDirection, bool)>, // for f/F/t/T (direction, before_flag)
+    pub last_find: Option<(FindDirection, bool, char)>, // for ;/, repeat
     pub pending_replace: bool, // for r command
+    pub pending_z: bool, // for z-prefix (zz, zt, zb)
+    pub pending_text_object: Option<bool>, // Some(false)=inner, Some(true)=around
 
     // Repeat
     pub last_edit: Option<EditRecord>,
@@ -89,7 +92,10 @@ impl VimEditor {
             pending_register: false,
             use_system_clipboard: false,
             pending_find: None,
+            last_find: None,
             pending_replace: false,
+            pending_z: false,
+            pending_text_object: None,
             last_edit: None,
             recording_edit: Vec::new(),
             is_recording: false,
@@ -413,6 +419,25 @@ impl VimEditor {
             self.cursor_col = col + reg.content.len() - 1;
         }
         self.modified = true;
+    }
+
+    // --- Join lines ---
+
+    pub fn join_lines(&mut self) {
+        if self.cursor_row + 1 < self.lines.len() {
+            self.save_undo();
+            let next_line = self.lines.remove(self.cursor_row + 1);
+            let trimmed = next_line.trim_start();
+            let join_col = self.lines[self.cursor_row].len();
+            if !self.lines[self.cursor_row].is_empty() && !trimmed.is_empty() {
+                self.lines[self.cursor_row].push(' ');
+                self.cursor_col = join_col;
+            } else {
+                self.cursor_col = join_col;
+            }
+            self.lines[self.cursor_row].push_str(trimmed);
+            self.modified = true;
+        }
     }
 
     // --- Indentation ---

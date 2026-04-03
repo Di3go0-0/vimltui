@@ -124,6 +124,7 @@ impl VimEditor {
         // Handle pending find char (f/F/t/T)
         if let Some((direction, before)) = self.pending_find.take() {
             if let KeyCode::Char(c) = key.code {
+                self.last_find = Some((direction, before, c));
                 if let Some(op) = self.pending_operator.take() {
                     // Operator + find: compute range from cursor to found char, apply operator
                     let motion = match (direction, before) {
@@ -154,10 +155,21 @@ impl VimEditor {
             return EditorAction::Handled;
         }
 
+        // Handle 'z' prefix (zz, zt, zb)
+        if self.pending_z {
+            self.pending_z = false;
+            return self.handle_z_prefix(key);
+        }
+
         // Handle 'g' prefix
         if self.pending_g {
             self.pending_g = false;
             return self.handle_g_prefix(key);
+        }
+
+        // Handle pending text object (inner/around)
+        if let Some(around) = self.pending_text_object.take() {
+            return self.handle_text_object_key(key, around);
         }
 
         // Count prefix (digits)
@@ -216,7 +228,7 @@ impl VimEditor {
                 self.move_word_end(n, true);
                 EditorAction::Handled
             }
-            KeyCode::Char('b') => {
+            KeyCode::Char('b') if !ctrl => {
                 let n = self.take_count();
                 self.move_word_back(n, false);
                 EditorAction::Handled
@@ -261,6 +273,33 @@ impl VimEditor {
             KeyCode::Char('u') if ctrl => {
                 self.pending_count = None;
                 self.half_page_up();
+                EditorAction::Handled
+            }
+            KeyCode::Char('f') if ctrl => {
+                self.pending_count = None;
+                self.full_page_down();
+                EditorAction::Handled
+            }
+            KeyCode::Char('b') if ctrl => {
+                self.pending_count = None;
+                self.full_page_up();
+                EditorAction::Handled
+            }
+
+            // --- Screen position ---
+            KeyCode::Char('H') => {
+                self.pending_count = None;
+                self.move_to_screen_top();
+                EditorAction::Handled
+            }
+            KeyCode::Char('M') => {
+                self.pending_count = None;
+                self.move_to_screen_middle();
+                EditorAction::Handled
+            }
+            KeyCode::Char('L') => {
+                self.pending_count = None;
+                self.move_to_screen_bottom();
                 EditorAction::Handled
             }
 
@@ -372,6 +411,77 @@ impl VimEditor {
                 }
                 EditorAction::Handled
             }
+            KeyCode::Char('X') => {
+                if self.cursor_col > 0 {
+                    self.save_undo();
+                    let n = self.take_count();
+                    for _ in 0..n {
+                        if self.cursor_col > 0 {
+                            self.cursor_col -= 1;
+                            self.delete_char_at_cursor();
+                        }
+                    }
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('D') => {
+                self.pending_count = None;
+                let count = 1;
+                self.execute_operator(&Operator::Delete, &Motion::LineEnd, count);
+                EditorAction::Handled
+            }
+            KeyCode::Char('C') => {
+                if self.config.insert_allowed {
+                    self.pending_count = None;
+                    self.save_undo();
+                    self.start_recording();
+                    let len = self.current_line_len();
+                    if self.cursor_col < len {
+                        self.lines[self.cursor_row].truncate(self.cursor_col);
+                        self.modified = true;
+                    }
+                    self.mode = VimMode::Insert;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('Y') => {
+                self.pending_count = None;
+                let count = 1;
+                self.execute_operator(&Operator::Yank, &Motion::Line, count);
+                EditorAction::Handled
+            }
+            KeyCode::Char('S') if !ctrl => {
+                if self.config.insert_allowed {
+                    self.pending_count = None;
+                    self.save_undo();
+                    self.start_recording();
+                    let indent = {
+                        let line = self.current_line();
+                        let trimmed = line.trim_start();
+                        line[..line.len() - trimmed.len()].to_string()
+                    };
+                    self.lines[self.cursor_row] = indent.clone();
+                    self.cursor_col = indent.len();
+                    self.mode = VimMode::Insert;
+                    self.modified = true;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('J') => {
+                let n = self.take_count();
+                for _ in 0..n {
+                    self.join_lines();
+                }
+                EditorAction::Handled
+            }
+
+            // --- Bracket matching ---
+            KeyCode::Char('%') => {
+                self.pending_count = None;
+                self.move_to_matching_bracket();
+                EditorAction::Handled
+            }
+
             // --- Undo/Redo ---
             KeyCode::Char('u') if !ctrl => {
                 self.pending_count = None;
@@ -432,6 +542,28 @@ impl VimEditor {
                 self.pending_find = Some((FindDirection::Backward, true));
                 EditorAction::Handled
             }
+            KeyCode::Char(';') => {
+                if let Some((dir, before, ch)) = self.last_find {
+                    match dir {
+                        FindDirection::Forward => self.find_char_forward(ch, before),
+                        FindDirection::Backward => self.find_char_backward(ch, before),
+                    }
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char(',') => {
+                if let Some((dir, before, ch)) = self.last_find {
+                    let rev_dir = match dir {
+                        FindDirection::Forward => FindDirection::Backward,
+                        FindDirection::Backward => FindDirection::Forward,
+                    };
+                    match rev_dir {
+                        FindDirection::Forward => self.find_char_forward(ch, before),
+                        FindDirection::Backward => self.find_char_backward(ch, before),
+                    }
+                }
+                EditorAction::Handled
+            }
 
             // --- Substitute (s) ---
             KeyCode::Char('s') if !ctrl => {
@@ -463,6 +595,22 @@ impl VimEditor {
                 self.jump_to_prev_match();
                 EditorAction::Handled
             }
+            KeyCode::Char('*') => {
+                if let Some(word) = self.word_under_cursor() {
+                    self.search.pattern = word;
+                    self.search.forward = true;
+                    self.jump_to_next_match();
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('#') => {
+                if let Some(word) = self.word_under_cursor() {
+                    self.search.pattern = word;
+                    self.search.forward = false;
+                    self.jump_to_prev_match();
+                }
+                EditorAction::Handled
+            }
 
             // --- Visual mode ---
             KeyCode::Char('v') if ctrl => {
@@ -484,6 +632,12 @@ impl VimEditor {
             // --- Repeat ---
             KeyCode::Char('.') => {
                 self.repeat_last_edit();
+                EditorAction::Handled
+            }
+
+            // --- z-prefix ---
+            KeyCode::Char('z') => {
+                self.pending_z = true;
                 EditorAction::Handled
             }
 
@@ -509,8 +663,10 @@ impl VimEditor {
                 self.pending_count = None;
                 self.pending_operator = None;
                 self.pending_g = false;
+                self.pending_z = false;
                 self.pending_find = None;
                 self.pending_replace = false;
+                self.pending_text_object = None;
                 self.search.pattern.clear();
                 EditorAction::Unhandled(key)
             }
@@ -543,6 +699,68 @@ impl VimEditor {
                 EditorAction::Handled
             }
         }
+    }
+
+    fn handle_z_prefix(&mut self, key: KeyEvent) -> EditorAction {
+        match key.code {
+            KeyCode::Char('z') => {
+                self.scroll_center();
+                EditorAction::Handled
+            }
+            KeyCode::Char('t') => {
+                self.scroll_top();
+                EditorAction::Handled
+            }
+            KeyCode::Char('b') => {
+                self.scroll_bottom();
+                EditorAction::Handled
+            }
+            _ => {
+                self.pending_count = None;
+                EditorAction::Handled
+            }
+        }
+    }
+
+    fn handle_text_object_key(&mut self, key: KeyEvent, around: bool) -> EditorAction {
+        let op = match self.pending_operator.take() {
+            Some(op) => op,
+            None => return EditorAction::Handled,
+        };
+        let count = self.take_count();
+
+        let motion = match key.code {
+            KeyCode::Char('w') => {
+                if around { Some(Motion::AroundWord) } else { Some(Motion::InnerWord) }
+            }
+            KeyCode::Char('"') => {
+                if around { Some(Motion::AroundQuote('"')) } else { Some(Motion::InnerQuote('"')) }
+            }
+            KeyCode::Char('\'') => {
+                if around { Some(Motion::AroundQuote('\'')) } else { Some(Motion::InnerQuote('\'')) }
+            }
+            KeyCode::Char('`') => {
+                if around { Some(Motion::AroundQuote('`')) } else { Some(Motion::InnerQuote('`')) }
+            }
+            KeyCode::Char('(') | KeyCode::Char(')') | KeyCode::Char('b') => {
+                if around { Some(Motion::AroundParen('(', ')')) } else { Some(Motion::InnerParen('(', ')')) }
+            }
+            KeyCode::Char('{') | KeyCode::Char('}') | KeyCode::Char('B') => {
+                if around { Some(Motion::AroundParen('{', '}')) } else { Some(Motion::InnerParen('{', '}')) }
+            }
+            KeyCode::Char('[') | KeyCode::Char(']') => {
+                if around { Some(Motion::AroundParen('[', ']')) } else { Some(Motion::InnerParen('[', ']')) }
+            }
+            KeyCode::Char('<') | KeyCode::Char('>') => {
+                if around { Some(Motion::AroundParen('<', '>')) } else { Some(Motion::InnerParen('<', '>')) }
+            }
+            _ => None,
+        };
+
+        if let Some(m) = motion {
+            self.execute_operator(&op, &m, count);
+        }
+        EditorAction::Handled
     }
 
     fn handle_operator_motion(&mut self, key: KeyEvent) -> EditorAction {
@@ -603,14 +821,20 @@ impl VimEditor {
                 return EditorAction::Handled;
             }
 
-            // Text objects: iw, i", i(
+            // Text objects: iw, i", i(, aw, a", a(
             KeyCode::Char('i') => {
-                // Need next char for text object
-                // Store operator back and set flag
                 self.pending_operator = Some(op);
-                // We'll handle text object in a simplified way
+                self.pending_text_object = Some(false); // inner
                 return EditorAction::Handled;
             }
+            KeyCode::Char('a') => {
+                self.pending_operator = Some(op);
+                self.pending_text_object = Some(true); // around
+                return EditorAction::Handled;
+            }
+
+            // % bracket matching as motion
+            KeyCode::Char('%') => Some(Motion::MatchBracket),
 
             KeyCode::Esc => return EditorAction::Handled,
             _ => None,
@@ -643,6 +867,39 @@ impl VimEditor {
                 self.mode = VimMode::Normal;
                 self.stop_recording();
                 EditorAction::Save
+            }
+            // Ctrl-w: delete word back
+            KeyCode::Char('w') if ctrl => {
+                self.save_undo();
+                // Delete backwards to start of word
+                if self.cursor_col > 0 {
+                    let line = self.lines[self.cursor_row].clone();
+                    let chars: Vec<char> = line.chars().collect();
+                    let mut col = self.cursor_col;
+                    // Skip whitespace
+                    while col > 0 && chars[col - 1].is_whitespace() { col -= 1; }
+                    // Skip word chars
+                    while col > 0 && (chars[col - 1].is_alphanumeric() || chars[col - 1] == '_') { col -= 1; }
+                    let byte_start: usize = chars[..col].iter().map(|c| c.len_utf8()).sum();
+                    let byte_end: usize = chars[..self.cursor_col].iter().map(|c| c.len_utf8()).sum();
+                    self.lines[self.cursor_row] = format!("{}{}", &line[..byte_start], &line[byte_end..]);
+                    self.cursor_col = col;
+                    self.modified = true;
+                }
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            // Ctrl-u: delete to start of line
+            KeyCode::Char('u') if ctrl => {
+                self.save_undo();
+                if self.cursor_col > 0 {
+                    let line = &self.lines[self.cursor_row];
+                    self.lines[self.cursor_row] = line[self.cursor_col..].to_string();
+                    self.cursor_col = 0;
+                    self.modified = true;
+                }
+                self.record_key(key);
+                EditorAction::Handled
             }
             // Query execution is now <leader>Enter (not available in Insert mode)
             KeyCode::Enter if ctrl => EditorAction::Handled,
@@ -750,12 +1007,29 @@ impl VimEditor {
                 self.visual_yank();
                 EditorAction::Handled
             }
+            KeyCode::Char('c') => {
+                if self.config.insert_allowed {
+                    self.start_recording();
+                    self.visual_delete();
+                    self.mode = VimMode::Insert;
+                }
+                EditorAction::Handled
+            }
             KeyCode::Char('>') => {
                 self.visual_indent();
                 EditorAction::Handled
             }
             KeyCode::Char('<') => {
                 self.visual_dedent();
+                EditorAction::Handled
+            }
+            KeyCode::Char('o') => {
+                // Swap cursor and anchor
+                if let Some(anchor) = self.visual_anchor {
+                    self.visual_anchor = Some((self.cursor_row, self.cursor_col));
+                    self.cursor_row = anchor.0;
+                    self.cursor_col = anchor.1;
+                }
                 EditorAction::Handled
             }
 

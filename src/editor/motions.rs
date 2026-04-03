@@ -81,6 +81,102 @@ impl VimEditor {
         self.clamp_cursor();
     }
 
+    pub fn full_page_down(&mut self) {
+        let page = self.visible_height;
+        self.scroll_offset = self.scroll_offset.saturating_add(page);
+        self.cursor_row = (self.cursor_row + page).min(self.lines.len().saturating_sub(1));
+        self.clamp_cursor();
+    }
+
+    pub fn full_page_up(&mut self) {
+        let page = self.visible_height;
+        self.scroll_offset = self.scroll_offset.saturating_sub(page);
+        self.cursor_row = self.cursor_row.saturating_sub(page);
+        self.clamp_cursor();
+    }
+
+    pub fn scroll_center(&mut self) {
+        let half = self.visible_height / 2;
+        self.scroll_offset = self.cursor_row.saturating_sub(half);
+    }
+
+    pub fn scroll_top(&mut self) {
+        self.scroll_offset = self.cursor_row;
+    }
+
+    pub fn scroll_bottom(&mut self) {
+        self.scroll_offset = self.cursor_row.saturating_sub(self.visible_height.saturating_sub(1));
+    }
+
+    pub fn move_to_screen_top(&mut self) {
+        self.cursor_row = self.scroll_offset;
+        self.clamp_cursor();
+    }
+
+    pub fn move_to_screen_middle(&mut self) {
+        self.cursor_row = (self.scroll_offset + self.visible_height / 2)
+            .min(self.lines.len().saturating_sub(1));
+        self.clamp_cursor();
+    }
+
+    pub fn move_to_screen_bottom(&mut self) {
+        self.cursor_row = (self.scroll_offset + self.visible_height.saturating_sub(1))
+            .min(self.lines.len().saturating_sub(1));
+        self.clamp_cursor();
+    }
+
+    pub fn move_to_matching_bracket(&mut self) {
+        let line = self.current_line();
+        let col = self.cursor_col.min(line.len().saturating_sub(1));
+        let ch = match line.as_bytes().get(col) {
+            Some(b) => *b,
+            None => return,
+        };
+        let (target, direction): (u8, i32) = match ch {
+            b'{' => (b'}', 1),
+            b'}' => (b'{', -1),
+            b'[' => (b']', 1),
+            b']' => (b'[', -1),
+            b'(' => (b')', 1),
+            b')' => (b'(', -1),
+            _ => return,
+        };
+        let mut depth: i32 = 1;
+        let mut r = self.cursor_row;
+        let mut c = col;
+        loop {
+            if direction > 0 {
+                c += 1;
+                if c >= self.lines.get(r).map_or(0, |l| l.len()) {
+                    r += 1;
+                    c = 0;
+                    if r >= self.lines.len() { return; }
+                }
+            } else {
+                if c == 0 {
+                    if r == 0 { return; }
+                    r -= 1;
+                    c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
+                } else {
+                    c -= 1;
+                }
+            }
+            let b = match self.lines.get(r).and_then(|l| l.as_bytes().get(c)) {
+                Some(b) => *b,
+                None => return,
+            };
+            if b == ch { depth += 1; }
+            if b == target {
+                depth -= 1;
+                if depth == 0 {
+                    self.cursor_row = r;
+                    self.cursor_col = c;
+                    return;
+                }
+            }
+        }
+    }
+
     // --- Word motions ---
 
     pub fn move_word_forward(&mut self, count: usize, big_word: bool) {
@@ -544,6 +640,103 @@ impl VimEditor {
                 }
                 None
             }
+            Motion::AroundWord => {
+                let (start, end) = self.find_around_word();
+                Some(MotionRange {
+                    start_row: sr,
+                    start_col: start,
+                    end_row: sr,
+                    end_col: end,
+                    linewise: false,
+                })
+            }
+            Motion::AroundQuote(quote_char) => {
+                if let Some((start, end)) = self.find_around_delimited(*quote_char, *quote_char) {
+                    Some(MotionRange {
+                        start_row: sr,
+                        start_col: start,
+                        end_row: sr,
+                        end_col: end,
+                        linewise: false,
+                    })
+                } else {
+                    None
+                }
+            }
+            Motion::AroundParen(open, close) => {
+                if let Some((start, end)) = self.find_around_delimited(*open, *close) {
+                    Some(MotionRange {
+                        start_row: sr,
+                        start_col: start,
+                        end_row: sr,
+                        end_col: end,
+                        linewise: false,
+                    })
+                } else {
+                    None
+                }
+            }
+            Motion::MatchBracket => {
+                // Simulate finding the matching bracket
+                let line = self.current_line();
+                let col = sc.min(line.len().saturating_sub(1));
+                let ch = match line.as_bytes().get(col) {
+                    Some(b) => *b,
+                    None => return None,
+                };
+                let (target, direction): (u8, i32) = match ch {
+                    b'{' => (b'}', 1),
+                    b'}' => (b'{', -1),
+                    b'[' => (b']', 1),
+                    b']' => (b'[', -1),
+                    b'(' => (b')', 1),
+                    b')' => (b'(', -1),
+                    _ => return None,
+                };
+                let mut depth: i32 = 1;
+                let mut r = sr;
+                let mut c = col;
+                loop {
+                    if direction > 0 {
+                        c += 1;
+                        if c >= self.lines.get(r).map_or(0, |l| l.len()) {
+                            r += 1;
+                            c = 0;
+                            if r >= self.lines.len() { return None; }
+                        }
+                    } else {
+                        if c == 0 {
+                            if r == 0 { return None; }
+                            r -= 1;
+                            c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
+                        } else {
+                            c -= 1;
+                        }
+                    }
+                    let b = match self.lines.get(r).and_then(|l| l.as_bytes().get(c)) {
+                        Some(b) => *b,
+                        None => return None,
+                    };
+                    if b == ch { depth += 1; }
+                    if b == target {
+                        depth -= 1;
+                        if depth == 0 {
+                            let (s_row, s_col, e_row, e_col) = if (r, c) < (sr, sc) {
+                                (r, c, sr, sc + 1)
+                            } else {
+                                (sr, sc, r, c + 1)
+                            };
+                            return Some(MotionRange {
+                                start_row: s_row,
+                                start_col: s_col,
+                                end_row: e_row,
+                                end_col: e_col,
+                                linewise: false,
+                            });
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -602,6 +795,106 @@ impl VimEditor {
         }
 
         (start, end + 1)
+    }
+
+    fn find_around_word(&self) -> (usize, usize) {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+            return (0, 0);
+        }
+        let col = self.cursor_col.min(chars.len().saturating_sub(1));
+        let c = chars[col];
+        let is_word = c.is_alphanumeric() || c == '_';
+
+        let mut start = col;
+        let mut end = col;
+
+        if is_word {
+            while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+                start -= 1;
+            }
+            while end + 1 < chars.len()
+                && (chars[end + 1].is_alphanumeric() || chars[end + 1] == '_')
+            {
+                end += 1;
+            }
+            // Include trailing whitespace
+            while end + 1 < chars.len() && chars[end + 1].is_whitespace() {
+                end += 1;
+            }
+        } else if c.is_whitespace() {
+            while start > 0 && chars[start - 1].is_whitespace() {
+                start -= 1;
+            }
+            while end + 1 < chars.len() && chars[end + 1].is_whitespace() {
+                end += 1;
+            }
+        } else {
+            while start > 0
+                && !chars[start - 1].is_alphanumeric()
+                && chars[start - 1] != '_'
+                && !chars[start - 1].is_whitespace()
+            {
+                start -= 1;
+            }
+            while end + 1 < chars.len()
+                && !chars[end + 1].is_alphanumeric()
+                && chars[end + 1] != '_'
+                && !chars[end + 1].is_whitespace()
+            {
+                end += 1;
+            }
+        }
+
+        (start, end + 1)
+    }
+
+    fn find_around_delimited(&self, open: char, close: char) -> Option<(usize, usize)> {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let col = self.cursor_col.min(chars.len().saturating_sub(1));
+
+        let mut start = None;
+        for i in (0..=col).rev() {
+            if chars[i] == open {
+                start = Some(i); // include the delimiter
+                break;
+            }
+        }
+        let start = start?;
+
+        let search_from = if open == close { col.max(start + 1) } else { col.max(start) };
+        let mut end = None;
+        for (i, &ch) in chars.iter().enumerate().skip(search_from) {
+            if ch == close && i > start {
+                end = Some(i + 1); // include the delimiter
+                break;
+            }
+        }
+        let end = end?;
+
+        Some((start, end))
+    }
+
+    /// Get the word under cursor (for * and #)
+    pub fn word_under_cursor(&self) -> Option<String> {
+        let line = self.current_line();
+        let chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() { return None; }
+        let col = self.cursor_col.min(chars.len().saturating_sub(1));
+        let c = chars[col];
+        if !c.is_alphanumeric() && c != '_' { return None; }
+
+        let mut start = col;
+        let mut end = col;
+        while start > 0 && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_') {
+            start -= 1;
+        }
+        while end + 1 < chars.len() && (chars[end + 1].is_alphanumeric() || chars[end + 1] == '_') {
+            end += 1;
+        }
+        Some(chars[start..=end].iter().collect())
     }
 
     fn find_inner_delimited(&self, open: char, close: char) -> Option<(usize, usize)> {
@@ -790,4 +1083,8 @@ pub enum Motion {
     FindCharBefore(char),    // t
     FindCharBackward(char),  // F
     FindCharAfter(char),     // T
+    AroundWord,              // aw
+    AroundQuote(char),       // a" a' a`
+    AroundParen(char, char), // a( a) a{ a} a[ a]
+    MatchBracket,            // %
 }
