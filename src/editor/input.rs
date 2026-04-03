@@ -277,8 +277,8 @@ impl VimEditor {
                 if self.config.insert_allowed {
                     self.pending_count = None;
                     self.start_recording();
-                    self.move_right(1);
                     self.mode = VimMode::Insert;
+                    self.move_right(1);
                 }
                 EditorAction::Handled
             }
