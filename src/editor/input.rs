@@ -90,6 +90,7 @@ impl VimEditor {
                 self.command_buffer.clear();
                 self.search.pattern.clear();
                 self.preview_lines = None;
+                self.preview_highlights.clear();
                 let action = self.execute_command(&cmd);
                 self.ensure_cursor_visible();
                 action
@@ -99,6 +100,7 @@ impl VimEditor {
                     self.command_active = false;
                     self.search.pattern.clear();
                     self.preview_lines = None;
+                    self.preview_highlights.clear();
                 } else {
                     self.command_buffer.pop();
                 }
@@ -334,8 +336,19 @@ impl VimEditor {
         if self.pending_replace {
             self.pending_replace = false;
             if let KeyCode::Char(c) = key.code {
+                let count = self.take_count().max(1);
                 self.save_undo();
-                self.replace_char(c);
+                for _ in 0..count {
+                    if self.cursor_col < self.current_line_len() {
+                        self.replace_char(c);
+                    }
+                }
+                // After replacing, cursor stays on last replaced char
+                if self.cursor_col > 0 && count > 1 {
+                    self.cursor_col -= 1;
+                }
+            } else {
+                self.pending_count = None;
             }
             return EditorAction::Handled;
         }
