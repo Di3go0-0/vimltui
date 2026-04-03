@@ -23,6 +23,7 @@ impl VimEditor {
             Operator::Dedent => self.op_dedent(range.start_row, range.end_row),
             Operator::Uppercase => self.op_case(range.start_row, range.start_col, range.end_row, range.end_col, true),
             Operator::Lowercase => self.op_case(range.start_row, range.start_col, range.end_row, range.end_col, false),
+            Operator::ToggleCase => self.op_toggle_case(range.start_row, range.start_col, range.end_row, range.end_col),
         }
     }
 
@@ -199,6 +200,33 @@ impl VimEditor {
             self.modified = true;
         }
         // Multi-line case change not commonly needed, keep simple for now
+    }
+
+    fn op_toggle_case(
+        &mut self,
+        start_row: usize,
+        start_col: usize,
+        end_row: usize,
+        end_col: usize,
+    ) {
+        self.save_undo();
+        if start_row == end_row {
+            let line = &self.lines[start_row];
+            let s = start_col.min(line.len());
+            let e = end_col.min(line.len());
+            let changed: String = line[s..e]
+                .chars()
+                .map(|c| {
+                    if c.is_uppercase() {
+                        c.to_lowercase().to_string()
+                    } else {
+                        c.to_uppercase().to_string()
+                    }
+                })
+                .collect();
+            self.lines[start_row] = format!("{}{}{}", &line[..s], changed, &line[e..]);
+            self.modified = true;
+        }
     }
 
     /// Toggle case of character at cursor (~)

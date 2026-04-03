@@ -237,6 +237,87 @@ impl VimEditor {
         }
     }
 
+    /// Convert visual selection to uppercase
+    pub fn visual_uppercase(&mut self) {
+        self.visual_transform_case(|s| s.to_uppercase());
+    }
+
+    /// Convert visual selection to lowercase
+    pub fn visual_lowercase(&mut self) {
+        self.visual_transform_case(|s| s.to_lowercase());
+    }
+
+    /// Toggle case of visual selection
+    pub fn visual_toggle_case(&mut self) {
+        self.visual_transform_case(|s| {
+            s.chars()
+                .map(|c| {
+                    if c.is_uppercase() {
+                        c.to_lowercase().to_string()
+                    } else {
+                        c.to_uppercase().to_string()
+                    }
+                })
+                .collect()
+        });
+    }
+
+    fn visual_transform_case(&mut self, transform: impl Fn(&str) -> String) {
+        if let Some(kind) = self.visual_kind() {
+            self.save_undo();
+            if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+                match kind {
+                    VisualKind::Line => {
+                        let end = er.min(self.lines.len().saturating_sub(1));
+                        for row in sr..=end {
+                            self.lines[row] = transform(&self.lines[row]);
+                        }
+                    }
+                    VisualKind::Char => {
+                        let ec = (ec + 1).min(
+                            self.lines.get(er).map(|l| l.len()).unwrap_or(0),
+                        );
+                        if sr == er {
+                            let line = &self.lines[sr];
+                            let s = sc.min(line.len());
+                            let e = ec.min(line.len());
+                            let changed = transform(&line[s..e]);
+                            self.lines[sr] = format!("{}{}{}", &line[..s], changed, &line[e..]);
+                        } else {
+                            // First line
+                            let line = &self.lines[sr];
+                            let s = sc.min(line.len());
+                            self.lines[sr] = format!("{}{}", &line[..s], transform(&line[s..]));
+                            // Middle lines
+                            for row in (sr + 1)..er {
+                                self.lines[row] = transform(&self.lines[row]);
+                            }
+                            // Last line
+                            let line = &self.lines[er];
+                            let e = ec.min(line.len());
+                            self.lines[er] = format!("{}{}", transform(&line[..e]), &line[e..]);
+                        }
+                    }
+                    VisualKind::Block => {
+                        let left = sc.min(ec);
+                        let right = sc.max(ec) + 1;
+                        for row in sr..=er.min(self.lines.len().saturating_sub(1)) {
+                            let line = &self.lines[row];
+                            let l = left.min(line.len());
+                            let r = right.min(line.len());
+                            if l < r {
+                                let changed = transform(&line[l..r]);
+                                self.lines[row] = format!("{}{}{}", &line[..l], changed, &line[r..]);
+                            }
+                        }
+                    }
+                }
+                self.modified = true;
+            }
+            self.exit_visual();
+        }
+    }
+
     /// Exit visual mode
     pub fn exit_visual(&mut self) {
         self.visual_anchor = None;

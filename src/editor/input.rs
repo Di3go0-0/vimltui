@@ -907,6 +907,10 @@ impl VimEditor {
                 self.pending_operator = Some(Operator::Lowercase);
                 EditorAction::Handled
             }
+            KeyCode::Char('~') => {
+                self.pending_operator = Some(Operator::ToggleCase);
+                EditorAction::Handled
+            }
             _ => {
                 self.pending_count = None;
                 EditorAction::Handled
@@ -1295,6 +1299,18 @@ impl VimEditor {
             }
             KeyCode::Char('<') => {
                 self.visual_dedent();
+                EditorAction::Handled
+            }
+            KeyCode::Char('u') if !ctrl => {
+                self.visual_lowercase();
+                EditorAction::Handled
+            }
+            KeyCode::Char('U') => {
+                self.visual_uppercase();
+                EditorAction::Handled
+            }
+            KeyCode::Char('~') => {
+                self.visual_toggle_case();
                 EditorAction::Handled
             }
             KeyCode::Char('o') => {

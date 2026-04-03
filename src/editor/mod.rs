@@ -522,6 +522,7 @@ impl VimEditor {
                             Operator::Dedent => '<',
                             Operator::Uppercase => 'U',
                             Operator::Lowercase => 'u',
+                            Operator::ToggleCase => '~',
                         });
                     }
                     s

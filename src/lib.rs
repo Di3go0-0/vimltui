@@ -167,6 +167,7 @@ pub enum Operator {
     Dedent,
     Uppercase,
     Lowercase,
+    ToggleCase,
 }
 
 /// The range affected by a motion, used by operators.
