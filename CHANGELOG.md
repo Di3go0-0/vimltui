@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Live substitution preview** — when typing `:s` or `:%s`, matches highlight in real-time AND the replacement is shown live in the editor (like Neovim's `inccommand`). New `preview_lines` field on `VimEditor` provides the preview buffer for custom renderers.
+- **Live substitution preview** — when typing `:s` or `:%s`, matches highlight in real-time AND the replacement is shown live in the editor (like Neovim's `inccommand`). New `preview_lines` and `preview_highlights` fields on `VimEditor` for custom renderers. Replacement text is visually distinguished with `substitute_preview_bg` theme color.
 - **Smartcase** — search (`/`, `?`, `*`, `#`) and substitution (`:s`) are now case-insensitive when the pattern is all-lowercase, and case-sensitive when it contains any uppercase character. The `i` flag in `:s` still forces case-insensitive.
 
 ## [0.1.2] - 2026-04-03

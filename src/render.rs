@@ -176,8 +176,18 @@ pub fn render_with_options(
         // Check if this line has yank highlight
         let line_yank = compute_line_yank(line_idx, render_text.len(), &yank_highlight);
 
+        // Collect preview highlights for this line
+        let line_preview_hl: Vec<(usize, usize)> = editor
+            .preview_highlights
+            .iter()
+            .filter(|(r, _, _)| *r == line_idx)
+            .map(|(_, s, e)| (*s, *e))
+            .collect();
+
         if let Some((vis_start, vis_end)) = line_visual {
             render_line_with_visual(render_text, vis_start, vis_end, theme, highlighter, &mut spans);
+        } else if !line_preview_hl.is_empty() {
+            render_line_with_preview_hl(render_text, &line_preview_hl, theme, highlighter, &mut spans);
         } else if let Some((ys, ye)) = line_yank {
             render_line_with_yank(render_text, ys, ye, theme, highlighter, &mut spans);
         } else if has_search {
@@ -435,6 +445,34 @@ fn render_line_with_yank<'a>(
     }
     if line.is_empty() {
         spans.push(Span::styled(" ", yank_style));
+    }
+}
+
+fn render_line_with_preview_hl<'a>(
+    line: &'a str,
+    highlights: &[(usize, usize)],
+    theme: &VimTheme,
+    highlighter: &dyn SyntaxHighlighter,
+    spans: &mut Vec<Span<'a>>,
+) {
+    let preview_style = Style::default()
+        .bg(theme.substitute_preview_bg)
+        .add_modifier(Modifier::BOLD);
+
+    let mut pos = 0;
+    for &(hs, he) in highlights {
+        let hs = hs.min(line.len());
+        let he = he.min(line.len());
+        if hs > pos {
+            highlighter.highlight_segment(&line[pos..hs], spans);
+        }
+        if hs < he {
+            spans.push(Span::styled(&line[hs..he], preview_style));
+        }
+        pos = he;
+    }
+    if pos < line.len() {
+        highlighter.highlight_segment(&line[pos..], spans);
     }
 }
 

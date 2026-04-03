@@ -262,6 +262,8 @@ pub struct VimTheme {
     pub search_match_fg: Color,
     /// Background for yank highlight flash.
     pub yank_highlight_bg: Color,
+    /// Background for live substitution replacement preview.
+    pub substitute_preview_bg: Color,
 }
 
 /// Trait for language-specific syntax highlighting.

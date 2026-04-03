@@ -80,6 +80,7 @@ impl VimEditor {
                 self.command_buffer.clear();
                 self.search.pattern.clear();
                 self.preview_lines = None;
+                self.preview_highlights.clear();
                 EditorAction::Handled
             }
             KeyCode::Enter => {

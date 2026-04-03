@@ -65,6 +65,8 @@ pub struct VimEditor {
 
     // Live substitution preview
     pub preview_lines: Option<Vec<String>>,
+    /// Highlight ranges for replacement text in preview: (row, start_col, end_col)
+    pub preview_highlights: Vec<(usize, usize, usize)>,
 }
 
 impl VimEditor {
@@ -108,6 +110,7 @@ impl VimEditor {
             command_active: false,
             command_buffer: String::new(),
             preview_lines: None,
+            preview_highlights: Vec::new(),
         }
     }
 
@@ -478,7 +481,13 @@ impl VimEditor {
             self.search.pattern = self
                 .extract_substitute_pattern()
                 .unwrap_or_default();
-            self.preview_lines = self.compute_substitute_preview();
+            if let Some((lines, hl)) = self.compute_substitute_preview() {
+                self.preview_lines = Some(lines);
+                self.preview_highlights = hl;
+            } else {
+                self.preview_lines = None;
+                self.preview_highlights.clear();
+            }
             return;
         }
         self.command_line = match &self.mode {
@@ -618,8 +627,10 @@ impl VimEditor {
         !pattern.chars().any(|c| c.is_uppercase())
     }
 
-    /// Compute preview lines by applying the substitution without modifying the buffer.
-    fn compute_substitute_preview(&self) -> Option<Vec<String>> {
+    /// Compute preview lines and highlight ranges for replacement text.
+    fn compute_substitute_preview(
+        &self,
+    ) -> Option<(Vec<String>, Vec<(usize, usize, usize)>)> {
         let (pattern, replacement, all, flags) = self.extract_substitute_parts()?;
         let replacement = replacement?;
 
@@ -640,17 +651,33 @@ impl VimEditor {
         };
 
         let mut preview = self.lines.clone();
+        let mut highlights = Vec::new();
+
         for row in start..=end.min(preview.len().saturating_sub(1)) {
             let line = &self.lines[row];
-            let new_line = if global {
-                re.replace_all(line, replacement.as_str()).to_string()
-            } else {
-                re.replace(line, replacement.as_str()).to_string()
-            };
+            // Build new line and track replacement positions
+            let mut new_line = String::new();
+            let mut last_end = 0;
+            let matches: Vec<_> = re.find_iter(line).collect();
+            let match_count = if global { matches.len() } else { matches.len().min(1) };
+
+            for m in matches.iter().take(match_count) {
+                new_line.push_str(&line[last_end..m.start()]);
+                let rep_start = new_line.len();
+                // Expand replacement (handles $1, $2 etc.)
+                let expanded = re.replace(m.as_str(), replacement.as_str());
+                new_line.push_str(&expanded);
+                let rep_end = new_line.len();
+                if rep_start < rep_end {
+                    highlights.push((row, rep_start, rep_end));
+                }
+                last_end = m.end();
+            }
+            new_line.push_str(&line[last_end..]);
             preview[row] = new_line;
         }
 
-        Some(preview)
+        Some((preview, highlights))
     }
 
     // --- System clipboard ---
