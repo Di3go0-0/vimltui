@@ -522,12 +522,12 @@ checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
 
 [[package]]
 name = "vimltui"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "crossterm",
  "ratatui",
  "regex",
- "unicode-width 0.2.0",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]

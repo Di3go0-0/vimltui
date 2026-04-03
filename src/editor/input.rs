@@ -78,12 +78,14 @@ impl VimEditor {
             KeyCode::Esc => {
                 self.command_active = false;
                 self.command_buffer.clear();
+                self.search.pattern.clear();
                 EditorAction::Handled
             }
             KeyCode::Enter => {
                 let cmd = self.command_buffer.clone();
                 self.command_active = false;
                 self.command_buffer.clear();
+                self.search.pattern.clear();
                 let action = self.execute_command(&cmd);
                 self.ensure_cursor_visible();
                 action
@@ -91,6 +93,7 @@ impl VimEditor {
             KeyCode::Backspace => {
                 if self.command_buffer.is_empty() {
                     self.command_active = false;
+                    self.search.pattern.clear();
                 } else {
                     self.command_buffer.pop();
                 }

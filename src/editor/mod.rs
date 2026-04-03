@@ -470,6 +470,10 @@ impl VimEditor {
     pub fn update_command_line(&mut self) {
         if self.command_active {
             self.command_line = format!(":{}", self.command_buffer);
+            // Live preview: highlight substitution pattern while typing
+            self.search.pattern = self
+                .extract_substitute_pattern()
+                .unwrap_or_default();
             return;
         }
         self.command_line = match &self.mode {
@@ -508,6 +512,58 @@ impl VimEditor {
                 format!("-- {} --", label)
             }
         };
+    }
+
+    /// Extract the search pattern from a partial substitution command in command_buffer.
+    /// Returns None if the buffer doesn't contain a valid :s pattern.
+    fn extract_substitute_pattern(&self) -> Option<String> {
+        let cmd = self.command_buffer.trim();
+
+        // Strip range prefix (%, N,M)
+        let rest = if cmd.starts_with('%') {
+            &cmd[1..]
+        } else if let Some(pos) = cmd.find('s') {
+            let prefix = &cmd[..pos];
+            if prefix.is_empty() || prefix.chars().all(|c| c.is_ascii_digit() || c == ',') {
+                &cmd[pos..]
+            } else {
+                return None;
+            }
+        } else {
+            return None;
+        };
+
+        if !rest.starts_with('s') || rest.len() < 3 {
+            return None;
+        }
+
+        let delim = rest.as_bytes()[1] as char;
+        if delim.is_alphanumeric() {
+            return None;
+        }
+
+        // Extract pattern between first and second delimiter
+        let body = &rest[2..];
+        let mut pattern = String::new();
+        let mut chars = body.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    if next == delim {
+                        pattern.push(next);
+                        chars.next();
+                        continue;
+                    }
+                }
+                pattern.push(c);
+            } else if c == delim {
+                break;
+            } else {
+                pattern.push(c);
+            }
+        }
+
+        if pattern.is_empty() { None } else { Some(pattern) }
     }
 
     // --- System clipboard ---
