@@ -4,6 +4,20 @@ use super::VimEditor;
 use super::motions::Motion;
 use crate::{EditorAction, FindDirection, Operator, VimMode, VisualKind};
 
+enum SubRange {
+    Current,
+    All,
+    Lines(usize, usize),
+}
+
+struct SubstituteCmd {
+    range: SubRange,
+    pattern: String,
+    replacement: String,
+    global: bool,
+    case_insensitive: bool,
+}
+
 impl VimEditor {
     /// Main input handler. Returns EditorAction to inform the parent.
     pub fn handle_key(&mut self, key: KeyEvent) -> EditorAction {
@@ -102,9 +116,170 @@ impl VimEditor {
             "q" => return EditorAction::Close,
             "q!" => return EditorAction::ForceClose,
             "wq" | "x" => return EditorAction::SaveAndClose,
+            "noh" | "nohlsearch" => {
+                self.search.pattern.clear();
+                return EditorAction::Handled;
+            }
             _ => {}
         }
+
+        // Substitution: [range]s/pattern/replacement/[flags]
+        if let Some(sub) = Self::parse_substitute(trimmed) {
+            self.execute_substitute(sub);
+            return EditorAction::Handled;
+        }
+
         EditorAction::Handled
+    }
+
+    /// Parse a substitution command like `s/foo/bar/g`, `%s/foo/bar/gi`, `1,5s/foo/bar/`
+    fn parse_substitute(cmd: &str) -> Option<SubstituteCmd> {
+        let (range, rest) = if cmd.starts_with('%') {
+            (SubRange::All, &cmd[1..])
+        } else if let Some(comma_pos) = cmd.find(',') {
+            // Try to parse N,Ms/...
+            let before_comma = &cmd[..comma_pos];
+            let after_comma = &cmd[comma_pos + 1..];
+            // Find where 's' starts after the range
+            if let Some(s_pos) = after_comma.find('s') {
+                let end_str = &after_comma[..s_pos];
+                if let (Ok(start), Ok(end)) = (before_comma.parse::<usize>(), end_str.parse::<usize>()) {
+                    (SubRange::Lines(start, end), &after_comma[s_pos..])
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        } else {
+            (SubRange::Current, cmd)
+        };
+
+        if !rest.starts_with('s') || rest.len() < 4 {
+            return None;
+        }
+
+        let delim = rest.as_bytes()[1] as char;
+        if delim.is_alphanumeric() {
+            return None;
+        }
+
+        // Parse s/pattern/replacement/flags — handle escaped delimiters
+        let body = &rest[2..]; // skip 's' and delimiter
+        let mut parts: Vec<String> = Vec::new();
+        let mut current = String::new();
+        let mut chars = body.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    if next == delim {
+                        current.push(next);
+                        chars.next();
+                        continue;
+                    }
+                }
+                current.push(c);
+            } else if c == delim {
+                parts.push(current.clone());
+                current.clear();
+            } else {
+                current.push(c);
+            }
+        }
+        // Last part is flags (or the replacement if no trailing delimiter)
+        if parts.len() < 2 {
+            // Not enough parts
+            if parts.len() == 1 {
+                // pattern found but no closing delimiter for replacement
+                parts.push(current);
+                current = String::new();
+            } else {
+                return None;
+            }
+        }
+
+        let pattern = parts[0].clone();
+        let replacement = parts[1].clone();
+        let flags_str = if parts.len() > 2 { &parts[2] } else { &current };
+
+        let global = flags_str.contains('g');
+        let case_insensitive = flags_str.contains('i');
+
+        if pattern.is_empty() {
+            return None;
+        }
+
+        Some(SubstituteCmd {
+            range,
+            pattern,
+            replacement,
+            global,
+            case_insensitive,
+        })
+    }
+
+    fn execute_substitute(&mut self, sub: SubstituteCmd) {
+        // Build regex
+        let regex_pattern = if sub.case_insensitive {
+            format!("(?i){}", sub.pattern)
+        } else {
+            sub.pattern.clone()
+        };
+
+        let re = match regex::Regex::new(&regex_pattern) {
+            Ok(r) => r,
+            Err(_) => {
+                self.command_line = format!("E486: Invalid pattern: {}", sub.pattern);
+                return;
+            }
+        };
+
+        let (start, end) = match sub.range {
+            SubRange::Current => (self.cursor_row, self.cursor_row),
+            SubRange::All => (0, self.lines.len().saturating_sub(1)),
+            SubRange::Lines(s, e) => {
+                let start = s.saturating_sub(1).min(self.lines.len().saturating_sub(1));
+                let end = e.saturating_sub(1).min(self.lines.len().saturating_sub(1));
+                (start, end)
+            }
+        };
+
+        self.save_undo();
+        let mut total_replacements = 0;
+        let mut lines_changed = 0;
+
+        for row in start..=end {
+            if row >= self.lines.len() { break; }
+            let line = &self.lines[row];
+            let new_line = if sub.global {
+                re.replace_all(line, sub.replacement.as_str()).to_string()
+            } else {
+                re.replace(line, sub.replacement.as_str()).to_string()
+            };
+            if new_line != *line {
+                let count = if sub.global {
+                    re.find_iter(line).count()
+                } else {
+                    1
+                };
+                total_replacements += count;
+                lines_changed += 1;
+                self.lines[row] = new_line;
+            }
+        }
+
+        if total_replacements > 0 {
+            self.modified = true;
+            self.command_line = format!(
+                "{} substitution{} on {} line{}",
+                total_replacements,
+                if total_replacements == 1 { "" } else { "s" },
+                lines_changed,
+                if lines_changed == 1 { "" } else { "s" },
+            );
+        } else {
+            self.command_line = format!("E486: Pattern not found: {}", sub.pattern);
+        }
     }
 
     // --- Normal Mode ---
