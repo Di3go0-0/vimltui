@@ -192,6 +192,19 @@ impl VimEditor {
         self.lines.len()
     }
 
+    /// Returns the cursor shape hint for the current mode.
+    pub fn cursor_shape(&self) -> crate::CursorShape {
+        if self.pending_replace {
+            return crate::CursorShape::Underline;
+        }
+        match &self.mode {
+            VimMode::Normal => crate::CursorShape::Block,
+            VimMode::Insert => crate::CursorShape::Bar,
+            VimMode::Replace => crate::CursorShape::Underline,
+            VimMode::Visual(_) => crate::CursorShape::Block,
+        }
+    }
+
     pub fn current_line(&self) -> &str {
         self.lines.get(self.cursor_row).map(|s| s.as_str()).unwrap_or("")
     }
@@ -203,7 +216,7 @@ impl VimEditor {
     /// Clamp cursor column to valid range for current line
     pub fn clamp_cursor(&mut self) {
         let max_col = match self.mode {
-            VimMode::Insert => self.current_line_len(),
+            VimMode::Insert | VimMode::Replace => self.current_line_len(),
             _ => self.current_line_len().saturating_sub(1).max(0),
         };
         if self.cursor_col > max_col {
@@ -517,6 +530,7 @@ impl VimEditor {
                 }
             }
             VimMode::Insert => "-- INSERT --".to_string(),
+            VimMode::Replace => "-- REPLACE --".to_string(),
             VimMode::Visual(kind) => {
                 let label = match kind {
                     super::VisualKind::Char => "VISUAL",

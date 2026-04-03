@@ -10,7 +10,7 @@ impl VimEditor {
 
     pub fn move_right(&mut self, count: usize) {
         let max = match self.mode {
-            super::VimMode::Insert => self.current_line_len(),
+            super::VimMode::Insert | super::VimMode::Replace => self.current_line_len(),
             _ => self.current_line_len().saturating_sub(1),
         };
         self.cursor_col = (self.cursor_col + count).min(max);
@@ -40,7 +40,7 @@ impl VimEditor {
     pub fn move_to_line_end(&mut self) {
         let len = self.current_line_len();
         self.cursor_col = match self.mode {
-            super::VimMode::Insert => len,
+            super::VimMode::Insert | super::VimMode::Replace => len,
             _ => len.saturating_sub(1),
         };
     }

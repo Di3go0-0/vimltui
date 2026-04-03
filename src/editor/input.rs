@@ -38,6 +38,7 @@ impl VimEditor {
             match &self.mode {
                 VimMode::Normal => self.handle_normal(key),
                 VimMode::Insert => self.handle_insert(key),
+                VimMode::Replace => self.handle_replace(key),
                 VimMode::Visual(_) => self.handle_visual(key),
             }
         };
@@ -681,6 +682,15 @@ impl VimEditor {
                 self.pending_replace = true;
                 EditorAction::Handled
             }
+            KeyCode::Char('R') => {
+                if self.config.insert_allowed {
+                    self.pending_count = None;
+                    self.save_undo();
+                    self.start_recording();
+                    self.mode = VimMode::Replace;
+                }
+                EditorAction::Handled
+            }
             KeyCode::Char('"') => {
                 self.pending_register = true;
                 EditorAction::Handled
@@ -1115,6 +1125,67 @@ impl VimEditor {
                 self.save_undo();
                 // Insert 4 spaces
                 for _ in 0..4 {
+                    self.insert_char(' ');
+                }
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            _ => EditorAction::Handled,
+        }
+    }
+
+    // --- Replace Mode ---
+
+    fn handle_replace(&mut self, key: KeyEvent) -> EditorAction {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = VimMode::Normal;
+                if self.cursor_col > 0 {
+                    self.cursor_col -= 1;
+                }
+                self.stop_recording();
+                self.clamp_cursor();
+                EditorAction::Handled
+            }
+            KeyCode::Char('s') if ctrl => {
+                self.mode = VimMode::Normal;
+                self.stop_recording();
+                EditorAction::Save
+            }
+            KeyCode::Enter => {
+                self.save_undo();
+                self.insert_newline();
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Backspace => {
+                self.save_undo();
+                self.backspace();
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Char(c) => {
+                self.save_undo();
+                // Overwrite: delete char at cursor then insert
+                if self.cursor_row < self.lines.len()
+                    && self.cursor_col < self.lines[self.cursor_row].len()
+                {
+                    self.lines[self.cursor_row].remove(self.cursor_col);
+                }
+                self.insert_char(c);
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Tab => {
+                self.save_undo();
+                for _ in 0..4 {
+                    if self.cursor_row < self.lines.len()
+                        && self.cursor_col < self.lines[self.cursor_row].len()
+                    {
+                        self.lines[self.cursor_row].remove(self.cursor_col);
+                    }
                     self.insert_char(' ');
                 }
                 self.record_key(key);

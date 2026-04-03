@@ -92,7 +92,16 @@ pub use editor::VimEditor;
 pub enum VimMode {
     Normal,
     Insert,
+    Replace,
     Visual(VisualKind),
+}
+
+/// Cursor shape hint for renderers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorShape {
+    Block,
+    Bar,
+    Underline,
 }
 
 /// Visual selection kind.
