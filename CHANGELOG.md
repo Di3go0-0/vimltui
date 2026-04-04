@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-04-04
+
+### Fixed
+
+- **`cargo install` broken for consumers** — the permissive `ratatui = ">=0.26, <1.0"` range caused cargo to resolve two incompatible ratatui versions (0.26 + 0.30) when consumers pinned an older version, producing `ratatui::style::Color` vs `ratatui_core::style::color::Color` type mismatches. Pinned to `ratatui = "0.30"`, `crossterm = "0.29"`, `unicode-width = "0.2"`.
+- **Deprecated `frame.set_cursor()`** — replaced with `frame.set_cursor_position()` (ratatui 0.30 API).
+
+### Code quality
+
+- Suppressed `clippy::too_many_arguments` and `clippy::type_complexity` warnings surfaced by newer clippy.
+
 ## [0.1.4] - 2026-04-04
 
 ### Added
@@ -97,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `VimModeConfig` — restrict available modes (e.g., read-only viewers)
 - `EditorAction` — generic return type for parent application integration
 
+[0.1.5]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.5
 [0.1.4]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.2
