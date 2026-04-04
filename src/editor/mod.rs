@@ -643,6 +643,7 @@ impl VimEditor {
     }
 
     /// Compute preview lines and highlight ranges for replacement text.
+    #[allow(clippy::type_complexity)]
     fn compute_substitute_preview(
         &self,
     ) -> Option<(Vec<String>, Vec<(usize, usize, usize)>)> {
