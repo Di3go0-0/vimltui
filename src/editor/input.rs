@@ -1317,50 +1317,94 @@ impl VimEditor {
     fn handle_visual(&mut self, key: KeyEvent) -> EditorAction {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
+        // Count prefix (digits) — same as normal mode
+        if let KeyCode::Char(c) = key.code
+            && c.is_ascii_digit() && (c != '0' || self.pending_count.is_some()) {
+                let digit = c.to_digit(10).unwrap_or(0) as usize;
+                let current = self.pending_count.unwrap_or(0);
+                self.pending_count = Some(current * 10 + digit);
+                return EditorAction::Handled;
+            }
+
         match key.code {
             KeyCode::Esc => {
+                self.pending_count = None;
                 self.exit_visual();
                 EditorAction::Handled
             }
             // Movement (updates selection)
             KeyCode::Char('h') | KeyCode::Left if !ctrl => {
-                self.move_left(1);
+                let n = self.take_count();
+                self.move_left(n);
                 EditorAction::Handled
             }
             KeyCode::Char('l') | KeyCode::Right if !ctrl => {
-                self.move_right(1);
+                let n = self.take_count();
+                self.move_right(n);
                 EditorAction::Handled
             }
             KeyCode::Char('j') | KeyCode::Down if !ctrl => {
-                self.move_down(1);
+                let n = self.take_count();
+                self.move_down(n);
                 EditorAction::Handled
             }
             KeyCode::Char('k') | KeyCode::Up if !ctrl => {
-                self.move_up(1);
+                let n = self.take_count();
+                self.move_up(n);
                 EditorAction::Handled
             }
             KeyCode::Char('w') => {
-                self.move_word_forward(1, false);
+                let n = self.take_count();
+                self.move_word_forward(n, false);
                 EditorAction::Handled
             }
-            KeyCode::Char('b') => {
-                self.move_word_back(1, false);
+            KeyCode::Char('W') => {
+                let n = self.take_count();
+                self.move_word_forward(n, true);
+                EditorAction::Handled
+            }
+            KeyCode::Char('b') if !ctrl => {
+                let n = self.take_count();
+                self.move_word_back(n, false);
+                EditorAction::Handled
+            }
+            KeyCode::Char('B') => {
+                let n = self.take_count();
+                self.move_word_back(n, true);
                 EditorAction::Handled
             }
             KeyCode::Char('e') => {
-                self.move_word_end(1, false);
+                let n = self.take_count();
+                self.move_word_end(n, false);
+                EditorAction::Handled
+            }
+            KeyCode::Char('E') => {
+                let n = self.take_count();
+                self.move_word_end(n, true);
                 EditorAction::Handled
             }
             KeyCode::Char('0') => {
+                self.pending_count = None;
                 self.move_to_line_start();
                 EditorAction::Handled
             }
+            KeyCode::Char('^') => {
+                self.pending_count = None;
+                self.move_to_first_non_blank();
+                EditorAction::Handled
+            }
             KeyCode::Char('$') => {
+                self.pending_count = None;
                 self.move_to_line_end();
                 EditorAction::Handled
             }
             KeyCode::Char('G') => {
-                self.move_to_bottom();
+                let count = self.pending_count.take();
+                if let Some(n) = count {
+                    self.move_to_line(n);
+                } else {
+                    self.move_to_bottom();
+                }
                 EditorAction::Handled
             }
             KeyCode::Char('g') => {
@@ -1368,24 +1412,46 @@ impl VimEditor {
                 EditorAction::Handled
             }
             KeyCode::Char('d') if ctrl => {
+                self.pending_count = None;
                 self.half_page_down();
                 EditorAction::Handled
             }
             KeyCode::Char('u') if ctrl => {
+                self.pending_count = None;
                 self.half_page_up();
+                EditorAction::Handled
+            }
+            KeyCode::Char('f') if ctrl => {
+                self.pending_count = None;
+                self.full_page_down();
+                EditorAction::Handled
+            }
+            KeyCode::Char('b') if ctrl => {
+                self.pending_count = None;
+                self.full_page_up();
+                EditorAction::Handled
+            }
+
+            // --- Bracket matching ---
+            KeyCode::Char('%') => {
+                self.pending_count = None;
+                self.move_to_matching_bracket();
                 EditorAction::Handled
             }
 
             // Actions on selection
             KeyCode::Char('d') | KeyCode::Char('x') => {
+                self.pending_count = None;
                 self.visual_delete();
                 EditorAction::Handled
             }
             KeyCode::Char('y') => {
+                self.pending_count = None;
                 self.visual_yank();
                 EditorAction::Handled
             }
             KeyCode::Char('c') => {
+                self.pending_count = None;
                 if self.config.insert_allowed {
                     self.start_recording();
                     self.visual_delete();
@@ -1394,26 +1460,32 @@ impl VimEditor {
                 EditorAction::Handled
             }
             KeyCode::Char('>') => {
+                self.pending_count = None;
                 self.visual_indent();
                 EditorAction::Handled
             }
             KeyCode::Char('<') => {
+                self.pending_count = None;
                 self.visual_dedent();
                 EditorAction::Handled
             }
             KeyCode::Char('u') if !ctrl => {
+                self.pending_count = None;
                 self.visual_lowercase();
                 EditorAction::Handled
             }
             KeyCode::Char('U') => {
+                self.pending_count = None;
                 self.visual_uppercase();
                 EditorAction::Handled
             }
             KeyCode::Char('~') => {
+                self.pending_count = None;
                 self.visual_toggle_case();
                 EditorAction::Handled
             }
             KeyCode::Char('o') => {
+                self.pending_count = None;
                 // Swap cursor and anchor
                 if let Some(anchor) = self.visual_anchor {
                     self.visual_anchor = Some((self.cursor_row, self.cursor_col));
@@ -1423,8 +1495,28 @@ impl VimEditor {
                 EditorAction::Handled
             }
 
+            // --- Delete key (same as d/x) ---
+            KeyCode::Delete => {
+                self.pending_count = None;
+                self.visual_delete();
+                EditorAction::Handled
+            }
+
+            // --- Home/End ---
+            KeyCode::Home => {
+                self.pending_count = None;
+                self.move_to_line_start();
+                EditorAction::Handled
+            }
+            KeyCode::End => {
+                self.pending_count = None;
+                self.move_to_line_end();
+                EditorAction::Handled
+            }
+
             // Switch visual sub-mode
             KeyCode::Char('v') if !ctrl => {
+                self.pending_count = None;
                 match &self.mode {
                     VimMode::Visual(VisualKind::Char) => self.exit_visual(),
                     _ => {
@@ -1436,6 +1528,7 @@ impl VimEditor {
                 EditorAction::Handled
             }
             KeyCode::Char('V') => {
+                self.pending_count = None;
                 match &self.mode {
                     VimMode::Visual(VisualKind::Line) => self.exit_visual(),
                     _ => {
