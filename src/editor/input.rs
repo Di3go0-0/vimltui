@@ -1132,7 +1132,7 @@ impl VimEditor {
                 self.record_key(key);
                 EditorAction::Handled
             }
-            KeyCode::Char(c) => {
+            KeyCode::Char(c) if !ctrl => {
                 self.save_undo();
                 self.insert_char(c);
                 self.record_key(key);
@@ -1183,7 +1183,7 @@ impl VimEditor {
                 self.record_key(key);
                 EditorAction::Handled
             }
-            KeyCode::Char(c) => {
+            KeyCode::Char(c) if !ctrl => {
                 self.save_undo();
                 // Overwrite: delete char at cursor then insert
                 if self.cursor_row < self.lines.len()
