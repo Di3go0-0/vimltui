@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-04-04
+
+### Added
+
+- **Delete key** — works in all modes: Insert/Replace (forward delete), Normal (same as `x`), Visual (same as `d`), and as operator motion (e.g., `d<Delete>` maps to line start).
+- **Home/End keys** — works in all modes: maps to line start (`0`) and line end (`$`). Also works as operator motions (e.g., `d<Home>`, `y<End>`).
+- **Arrow keys in Insert/Replace mode** — Left, Right, Up, Down move the cursor without leaving insert mode.
+- **Visual mode count prefix** — number + motion now works in Visual mode (e.g., `v10j` selects 10 lines down, `v5w` selects 5 words). Also added missing motions: `W`/`B`/`E` (big-word), `^` (first non-blank), `%` (bracket match), `Ctrl+F`/`Ctrl+B` (full page scroll).
+
+### Fixed
+
+- **Ctrl+Char inserting characters in Insert/Replace mode** — unhandled Ctrl+key combinations (e.g., Ctrl+H from Ctrl+Delete) no longer insert the raw character; they are now silently ignored. Previously, only Ctrl+S/W/U were guarded, so any other Ctrl+letter fell through to the character-insert branch.
+
+### Code quality
+
+- Collapsed nested `else { if }` blocks into `else if` in bracket matching (motions.rs).
+- Replaced manual `starts_with` + slice with `strip_prefix` in substitution parsing.
+- Added `Delete` key replay support in dot-repeat (`.`).
+
 ## [0.1.3] - 2026-04-03
 
 ### Added
@@ -78,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `VimModeConfig` — restrict available modes (e.g., read-only viewers)
 - `EditorAction` — generic return type for parent application integration
 
+[0.1.4]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.4
 [0.1.3]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Di3go0-0/vimltui/releases/tag/v0.1.1
