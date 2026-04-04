@@ -144,8 +144,8 @@ impl VimEditor {
 
     /// Parse a substitution command like `s/foo/bar/g`, `%s/foo/bar/gi`, `1,5s/foo/bar/`
     fn parse_substitute(cmd: &str) -> Option<SubstituteCmd> {
-        let (range, rest) = if cmd.starts_with('%') {
-            (SubRange::All, &cmd[1..])
+        let (range, rest) = if let Some(after) = cmd.strip_prefix('%') {
+            (SubRange::All, after)
         } else if let Some(comma_pos) = cmd.find(',') {
             // Try to parse N,Ms/...
             let before_comma = &cmd[..comma_pos];

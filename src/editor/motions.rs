@@ -152,14 +152,12 @@ impl VimEditor {
                     c = 0;
                     if r >= self.lines.len() { return; }
                 }
+            } else if c == 0 {
+                if r == 0 { return; }
+                r -= 1;
+                c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
             } else {
-                if c == 0 {
-                    if r == 0 { return; }
-                    r -= 1;
-                    c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
-                } else {
-                    c -= 1;
-                }
+                c -= 1;
             }
             let b = match self.lines.get(r).and_then(|l| l.as_bytes().get(c)) {
                 Some(b) => *b,
@@ -704,14 +702,12 @@ impl VimEditor {
                             c = 0;
                             if r >= self.lines.len() { return None; }
                         }
+                    } else if c == 0 {
+                        if r == 0 { return None; }
+                        r -= 1;
+                        c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
                     } else {
-                        if c == 0 {
-                            if r == 0 { return None; }
-                            r -= 1;
-                            c = self.lines.get(r).map_or(0, |l| l.len().saturating_sub(1));
-                        } else {
-                            c -= 1;
-                        }
+                        c -= 1;
                     }
                     let b = match self.lines.get(r).and_then(|l| l.as_bytes().get(c)) {
                         Some(b) => *b,

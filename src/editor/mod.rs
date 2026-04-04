@@ -555,8 +555,8 @@ impl VimEditor {
         let cmd = self.command_buffer.trim();
 
         // Strip range prefix and determine if % (all lines)
-        let (all, rest) = if cmd.starts_with('%') {
-            (true, &cmd[1..])
+        let (all, rest) = if let Some(after) = cmd.strip_prefix('%') {
+            (true, after)
         } else if let Some(pos) = cmd.find('s') {
             let prefix = &cmd[..pos];
             if prefix.is_empty() || prefix.chars().all(|c| c.is_ascii_digit() || c == ',') {
