@@ -23,6 +23,7 @@ pub fn render(
     render_with_options(frame, editor, focused, theme, highlighter, area, title, None);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_with_options(
     frame: &mut Frame,
     editor: &mut VimEditor,
@@ -210,11 +211,10 @@ pub fn render_with_options(
             let cursor_screen_col =
                 (line_count_width + 2 + editor.cursor_col) as u16;
             let cursor_screen_row = screen_row as u16;
-            #[allow(deprecated)]
-            frame.set_cursor(
-                inner.x + cursor_screen_col,
-                inner.y + cursor_screen_row,
-            );
+            frame.set_cursor_position(ratatui::layout::Position {
+                x: inner.x + cursor_screen_col,
+                y: inner.y + cursor_screen_row,
+            });
         }
 
         rendered_lines.push(Line::from(spans));
@@ -329,6 +329,7 @@ fn render_line_with_visual<'a>(
 /// Render a line with search match highlighting.
 /// All occurrences of the pattern get `search_match_bg`, while the occurrence
 /// at the cursor position gets `search_current_bg`.
+#[allow(clippy::too_many_arguments)]
 fn render_line_with_search<'a>(
     line: &'a str,
     line_idx: usize,
