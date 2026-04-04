@@ -871,6 +871,26 @@ impl VimEditor {
             // Query execution is now <leader>Enter, not Ctrl+Enter
             KeyCode::Enter if ctrl => EditorAction::Handled,
 
+            // --- Delete key (same as x) ---
+            KeyCode::Delete => {
+                let n = self.take_count();
+                self.save_undo();
+                for _ in 0..n {
+                    self.delete_char_at_cursor();
+                }
+                EditorAction::Handled
+            }
+
+            // --- Home/End ---
+            KeyCode::Home => {
+                self.move_to_line_start();
+                EditorAction::Handled
+            }
+            KeyCode::End => {
+                self.move_to_line_end();
+                EditorAction::Handled
+            }
+
             // --- Escape clears pending and search highlights ---
             KeyCode::Esc => {
                 self.pending_count = None;
@@ -1006,8 +1026,8 @@ impl VimEditor {
             KeyCode::Char('E') => Some(Motion::BigWordEnd),
             KeyCode::Char('b') => Some(Motion::WordBack),
             KeyCode::Char('B') => Some(Motion::BigWordBack),
-            KeyCode::Char('0') => Some(Motion::LineStart),
-            KeyCode::Char('$') => Some(Motion::LineEnd),
+            KeyCode::Char('0') | KeyCode::Home => Some(Motion::LineStart),
+            KeyCode::Char('$') | KeyCode::End => Some(Motion::LineEnd),
             KeyCode::Char('^') => Some(Motion::FirstNonBlank),
             KeyCode::Char('G') => Some(Motion::ToBottom),
             KeyCode::Char('g') => {
@@ -1132,6 +1152,46 @@ impl VimEditor {
                 self.record_key(key);
                 EditorAction::Handled
             }
+            KeyCode::Delete => {
+                self.save_undo();
+                self.delete_char_at_cursor();
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Home => {
+                self.cursor_col = 0;
+                EditorAction::Handled
+            }
+            KeyCode::End => {
+                self.cursor_col = self.current_line_len();
+                EditorAction::Handled
+            }
+            KeyCode::Left => {
+                if self.cursor_col > 0 {
+                    self.cursor_col -= 1;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Right => {
+                if self.cursor_col < self.current_line_len() {
+                    self.cursor_col += 1;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Up => {
+                if self.cursor_row > 0 {
+                    self.cursor_row -= 1;
+                    self.clamp_cursor();
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Down => {
+                if self.cursor_row + 1 < self.lines.len() {
+                    self.cursor_row += 1;
+                    self.clamp_cursor();
+                }
+                EditorAction::Handled
+            }
             KeyCode::Char(c) if !ctrl => {
                 self.save_undo();
                 self.insert_char(c);
@@ -1181,6 +1241,46 @@ impl VimEditor {
                 self.save_undo();
                 self.backspace();
                 self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Delete => {
+                self.save_undo();
+                self.delete_char_at_cursor();
+                self.record_key(key);
+                EditorAction::Handled
+            }
+            KeyCode::Home => {
+                self.cursor_col = 0;
+                EditorAction::Handled
+            }
+            KeyCode::End => {
+                self.cursor_col = self.current_line_len();
+                EditorAction::Handled
+            }
+            KeyCode::Left => {
+                if self.cursor_col > 0 {
+                    self.cursor_col -= 1;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Right => {
+                if self.cursor_col < self.current_line_len() {
+                    self.cursor_col += 1;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Up => {
+                if self.cursor_row > 0 {
+                    self.cursor_row -= 1;
+                    self.clamp_cursor();
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Down => {
+                if self.cursor_row + 1 < self.lines.len() {
+                    self.cursor_row += 1;
+                    self.clamp_cursor();
+                }
                 EditorAction::Handled
             }
             KeyCode::Char(c) if !ctrl => {
@@ -1376,29 +1476,31 @@ impl VimEditor {
     }
 
     fn repeat_last_edit(&mut self) {
-        if let Some(edit) = self.last_edit.clone()
-            && self.config.insert_allowed {
-                self.save_undo();
-                self.mode = VimMode::Insert;
-                for key in &edit.keys {
-                    // Replay insert mode keys
-                    match key.code {
-                        KeyCode::Char(c) => self.insert_char(c),
-                        KeyCode::Enter => self.insert_newline(),
-                        KeyCode::Backspace => self.backspace(),
-                        KeyCode::Tab => {
-                            for _ in 0..4 {
-                                self.insert_char(' ');
-                            }
-                        }
-                        _ => {}
+        if !self.config.insert_allowed {
+            return;
+        }
+        let Some(edit) = self.last_edit.as_ref().cloned() else { return };
+        self.save_undo();
+        self.mode = VimMode::Insert;
+        for key in &edit.keys {
+            // Replay insert mode keys
+            match key.code {
+                KeyCode::Char(c) => self.insert_char(c),
+                KeyCode::Enter => self.insert_newline(),
+                KeyCode::Backspace => self.backspace(),
+                KeyCode::Delete => self.delete_char_at_cursor(),
+                KeyCode::Tab => {
+                    for _ in 0..4 {
+                        self.insert_char(' ');
                     }
                 }
-                self.mode = VimMode::Normal;
-                if self.cursor_col > 0 {
-                    self.cursor_col -= 1;
-                }
-                self.clamp_cursor();
+                _ => {}
             }
+        }
+        self.mode = VimMode::Normal;
+        if self.cursor_col > 0 {
+            self.cursor_col -= 1;
+        }
+        self.clamp_cursor();
     }
 }
