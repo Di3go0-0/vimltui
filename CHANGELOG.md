@@ -9,8 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Gutter diff signs** — optional sign column for visual diff indicators (`GutterSign` enum). Consumers populate `VimEditor::gutter_signs` to show added (green `│`), modified (yellow `│`), deleted-above (red `▲`), and deleted-below (red `▼`) markers in the gutter. Line numbers change color for added/modified lines. When `gutter_signs` is empty, rendering is unchanged (zero overhead).
-- **Sign theme colors** — `VimTheme` gains `sign_added`, `sign_modified`, `sign_deleted` color fields.
+- **Gutter diff signs (opt-in)** — new `GutterConfig` struct and `GutterSign` enum for visual diff indicators in the gutter. Set `editor.gutter = Some(GutterConfig { signs, .. })` to enable. Shows added (green `│`), modified (yellow `│`), deleted-above (red `▲`), and deleted-below (red `▼`) markers. Line numbers change color for added/modified lines. **Fully backward compatible** — `VimTheme` and `VimEditor::new()` are unchanged; when `gutter` is `None` (the default), rendering is identical to 0.1.5.
+
+  ```rust
+  use vimltui::{GutterConfig, GutterSign};
+
+  editor.gutter = Some(GutterConfig {
+      signs: my_computed_signs,  // HashMap<usize, GutterSign>
+      ..Default::default()       // colors: Green, Yellow, Red
+  });
+  ```
 
 ### Fixed
 
