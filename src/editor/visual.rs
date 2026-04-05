@@ -194,7 +194,6 @@ impl VimEditor {
             }
             // Always copy to system clipboard
             self.copy_to_system_clipboard(&self.unnamed_register.content.clone());
-            self.use_system_clipboard = false;
 
             // Set yank highlight before exiting visual (we need the range)
             if let Some(((sr, sc), (er, ec))) = self.visual_range() {

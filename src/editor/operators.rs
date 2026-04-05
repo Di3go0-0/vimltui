@@ -115,7 +115,6 @@ impl VimEditor {
         end_col: usize,
         linewise: bool,
     ) {
-        self.use_system_clipboard = false;
         if linewise {
             let text: Vec<&str> = self.lines[start_row..=end_row.min(self.lines.len().saturating_sub(1))]
                 .iter()

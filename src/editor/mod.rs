@@ -397,9 +397,24 @@ impl VimEditor {
 
     // --- Paste ---
 
+    /// Resolve paste content: system clipboard first, then unnamed register fallback.
+    fn resolve_paste_register(&self) -> Register {
+        if let Some(text) = Self::read_system_clipboard() {
+            let linewise = text.ends_with('\n');
+            let content = if linewise {
+                text.trim_end_matches('\n').to_string()
+            } else {
+                text
+            };
+            Register { content, linewise }
+        } else {
+            self.unnamed_register.clone()
+        }
+    }
+
     #[allow(dead_code)]
     pub fn paste_after(&mut self) {
-        let reg = self.unnamed_register.clone();
+        let reg = self.resolve_paste_register();
         if reg.content.is_empty() {
             return;
         }
@@ -422,7 +437,7 @@ impl VimEditor {
 
     #[allow(dead_code)]
     pub fn paste_before(&mut self) {
-        let reg = self.unnamed_register.clone();
+        let reg = self.resolve_paste_register();
         if reg.content.is_empty() {
             return;
         }
@@ -723,7 +738,7 @@ impl VimEditor {
         }
     }
 
-    pub fn paste_from_system_clipboard(&mut self) {
+    pub fn read_system_clipboard() -> Option<String> {
         let cmds: &[(&str, &[&str])] = &[
             ("wl-paste", &["--no-newline"]),
             ("xclip", &["-selection", "clipboard", "-o"]),
@@ -735,32 +750,15 @@ impl VimEditor {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .output()
-                && output.status.success() {
-                    if let Ok(text) = String::from_utf8(output.stdout)
-                        && !text.is_empty() {
-                            self.save_undo();
-                            let col = (self.cursor_col + 1).min(self.current_line_len());
-                            // Insert text at cursor
-                            if text.contains('\n') {
-                                let parts: Vec<&str> = text.split('\n').collect();
-                                let after = self.lines[self.cursor_row][col..].to_string();
-                                self.lines[self.cursor_row].truncate(col);
-                                self.lines[self.cursor_row].push_str(parts[0]);
-                                for (i, part) in parts[1..].iter().enumerate() {
-                                    self.lines.insert(self.cursor_row + 1 + i, part.to_string());
-                                }
-                                let last_row = self.cursor_row + parts.len() - 1;
-                                self.lines[last_row].push_str(&after);
-                                self.cursor_row = last_row;
-                                self.cursor_col = self.lines[last_row].len() - after.len();
-                            } else {
-                                self.lines[self.cursor_row].insert_str(col, &text);
-                                self.cursor_col = col + text.len() - 1;
-                            }
-                            self.modified = true;
-                        }
-                    return;
+                && output.status.success()
+            {
+                if let Ok(text) = String::from_utf8(output.stdout) {
+                    if !text.is_empty() {
+                        return Some(text);
+                    }
                 }
+            }
         }
+        None
     }
 }

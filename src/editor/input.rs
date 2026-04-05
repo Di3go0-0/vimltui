@@ -299,12 +299,9 @@ impl VimEditor {
     fn handle_normal(&mut self, key: KeyEvent) -> EditorAction {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
-        // Handle register prefix ("x)
+        // Handle register prefix ("x) — system clipboard is always used
         if self.pending_register {
             self.pending_register = false;
-            if let KeyCode::Char('+') = key.code {
-                self.use_system_clipboard = true;
-            }
             return EditorAction::Handled;
         }
 
@@ -709,21 +706,11 @@ impl VimEditor {
                 EditorAction::Handled
             }
             KeyCode::Char('p') => {
-                if self.use_system_clipboard {
-                    self.paste_from_system_clipboard();
-                    self.use_system_clipboard = false;
-                } else {
-                    self.paste_after();
-                }
+                self.paste_after();
                 EditorAction::Handled
             }
             KeyCode::Char('P') => {
-                if self.use_system_clipboard {
-                    self.paste_from_system_clipboard();
-                    self.use_system_clipboard = false;
-                } else {
-                    self.paste_before();
-                }
+                self.paste_before();
                 EditorAction::Handled
             }
             KeyCode::Char('~') => {
