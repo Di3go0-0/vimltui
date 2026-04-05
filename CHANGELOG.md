@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`p`/`P` now read from system clipboard** — previously, paste only used the internal `unnamed_register`, ignoring the system clipboard. This broke paste between different editor instances within the same app and from external programs. Now `p`/`P` always try `wl-paste`/`xclip`/`xsel` first, falling back to the internal register only if no clipboard tool is available.
 - **Linewise detection for system clipboard paste** — content from the system clipboard that ends with `\n` is now correctly detected as linewise, so pasting a yanked line inserts it on a new line (like Vim) instead of inline.
+- **Multi-line clipboard paste collapsed into one line** — copying a multi-line block from another editor instance or external program and pasting with `p`/`P` now correctly inserts each line separately. Previously, content with internal newlines but not ending in `\n` was treated as characterwise and dumped into a single line.
 
 ### Code quality
 
