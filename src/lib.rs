@@ -241,6 +241,22 @@ impl YankHighlight {
     }
 }
 
+/// A gutter sign for a specific line, used for diff indicators.
+///
+/// Consumers populate [`VimEditor::gutter_signs`] with these values.
+/// When empty, the gutter renders exactly as before (zero overhead).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GutterSign {
+    /// Line was added (new) — green `│` and green line number.
+    Added,
+    /// Line was modified — yellow `│` and yellow line number.
+    Modified,
+    /// Lines were deleted above this position — red `▲`.
+    DeletedAbove,
+    /// Lines were deleted below this position — red `▼`.
+    DeletedBelow,
+}
+
 /// Direction for `f`/`F`/`t`/`T` character find motions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FindDirection {
@@ -274,6 +290,12 @@ pub struct VimTheme {
     pub yank_highlight_bg: Color,
     /// Background for live substitution replacement preview.
     pub substitute_preview_bg: Color,
+    /// Color for "added" gutter signs (default: Green).
+    pub sign_added: Color,
+    /// Color for "modified" gutter signs (default: Yellow).
+    pub sign_modified: Color,
+    /// Color for "deleted" gutter signs (default: Red).
+    pub sign_deleted: Color,
 }
 
 /// Trait for language-specific syntax highlighting.

@@ -4,9 +4,10 @@ pub mod operators;
 pub mod search;
 pub mod visual;
 
+use std::collections::HashMap;
 use crate::{
-    EditRecord, FindDirection, Operator, Register, SearchState, Snapshot, VimMode, VimModeConfig,
-    YankHighlight, SCROLLOFF,
+    EditRecord, FindDirection, GutterSign, Operator, Register, SearchState, Snapshot, VimMode,
+    VimModeConfig, YankHighlight, SCROLLOFF,
 };
 
 /// A self-contained Vim editor instance with its own buffer, cursor, mode, and state.
@@ -67,6 +68,10 @@ pub struct VimEditor {
     pub preview_lines: Option<Vec<String>>,
     /// Highlight ranges for replacement text in preview: (row, start_col, end_col)
     pub preview_highlights: Vec<(usize, usize, usize)>,
+
+    /// Optional gutter signs per line index (diff indicators).
+    /// When empty, rendering is unchanged.
+    pub gutter_signs: HashMap<usize, GutterSign>,
 }
 
 impl VimEditor {
@@ -111,6 +116,7 @@ impl VimEditor {
             command_buffer: String::new(),
             preview_lines: None,
             preview_highlights: Vec::new(),
+            gutter_signs: HashMap::new(),
         }
     }
 

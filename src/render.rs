@@ -6,7 +6,7 @@ use ratatui::Frame;
 use unicode_width::UnicodeWidthStr;
 
 use crate::editor::VimEditor;
-use crate::{SyntaxHighlighter, VimMode, VimTheme, VisualKind, YankHighlight};
+use crate::{GutterSign, SyntaxHighlighter, VimMode, VimTheme, VisualKind, YankHighlight};
 
 /// Visual selection range: ((start_row, start_col), (end_row, end_col))
 type VisualRange = Option<((usize, usize), (usize, usize))>;
@@ -94,7 +94,9 @@ pub fn render_with_options(
     // Render lines -- each line is padded to full widget width to prevent ghosting
     let line_count_width = format!("{}", editor.lines.len()).len().max(3);
     let bg_style = Style::default().bg(theme.editor_bg);
-    let num_col_width = line_count_width + 2; // digits + 2 spaces
+    let has_signs = !editor.gutter_signs.is_empty();
+    let sign_col_width: usize = if has_signs { 1 } else { 0 };
+    let num_col_width = line_count_width + 2 + sign_col_width;
     let available_text_width = full_width.saturating_sub(num_col_width);
 
     // Use preview lines (live substitution) if available, otherwise normal lines
@@ -124,7 +126,11 @@ pub fn render_with_options(
         let line_idx = editor.scroll_offset + screen_row;
         if line_idx >= display_lines.len() {
             // Tilde for empty lines past end of file
-            let prefix = format!("{:>width$}  ", "~", width = line_count_width);
+            let prefix = if has_signs {
+                format!("{:>width$}   ", "~", width = line_count_width)
+            } else {
+                format!("{:>width$}  ", "~", width = line_count_width)
+            };
             let used = prefix.len();
             let mut spans = vec![
                 Span::styled(prefix, Style::default().fg(theme.dim)),
@@ -146,22 +152,46 @@ pub fn render_with_options(
         };
 
         // Relative line numbers (like nvim set relativenumber + number)
-        let line_num = if is_cursor_line {
+        let sign = editor.gutter_signs.get(&line_idx);
+
+        let line_num = if has_signs {
+            if is_cursor_line {
+                format!("{:>width$} ", line_idx + 1, width = line_count_width)
+            } else {
+                let distance = line_idx.abs_diff(editor.cursor_row);
+                format!("{:>width$} ", distance, width = line_count_width)
+            }
+        } else if is_cursor_line {
             format!("{:>width$}  ", line_idx + 1, width = line_count_width)
         } else {
             let distance = line_idx.abs_diff(editor.cursor_row);
             format!("{:>width$}  ", distance, width = line_count_width)
         };
-        let num_style = if is_cursor_line {
-            Style::default()
+
+        let num_style = match sign {
+            Some(GutterSign::Added) => Style::default().fg(theme.sign_added),
+            Some(GutterSign::Modified) => Style::default().fg(theme.sign_modified),
+            _ if is_cursor_line => Style::default()
                 .fg(theme.line_nr_active)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(theme.line_nr)
+                .add_modifier(Modifier::BOLD),
+            _ => Style::default().fg(theme.line_nr),
         };
 
-        let num_len = line_num.len();
         let mut spans: Vec<Span> = vec![Span::styled(line_num, num_style)];
+
+        // Sign column (only when signs are active)
+        if has_signs {
+            let (sign_char, sign_style) = match sign {
+                Some(GutterSign::Added) => ("│", Style::default().fg(theme.sign_added)),
+                Some(GutterSign::Modified) => ("│", Style::default().fg(theme.sign_modified)),
+                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(theme.sign_deleted)),
+                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(theme.sign_deleted)),
+                None => (" ", bg_style),
+            };
+            spans.push(Span::styled(sign_char, sign_style));
+        }
+
+        let num_len = num_col_width;
 
         // Check if this line has visual selection
         let line_visual = compute_line_visual(
@@ -209,7 +239,7 @@ pub fn render_with_options(
         // Cursor rendering (if on this line and focused)
         if is_cursor_line && focused {
             let cursor_screen_col =
-                (line_count_width + 2 + editor.cursor_col) as u16;
+                (num_col_width + editor.cursor_col) as u16;
             let cursor_screen_row = screen_row as u16;
             frame.set_cursor_position(ratatui::layout::Position {
                 x: inner.x + cursor_screen_col,
