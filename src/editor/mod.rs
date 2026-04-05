@@ -411,6 +411,8 @@ impl VimEditor {
             } else {
                 text
             };
+            // Multi-line content from clipboard is always treated as linewise
+            let linewise = linewise || content.contains('\n');
             Register { content, linewise }
         } else {
             self.unnamed_register.clone()
