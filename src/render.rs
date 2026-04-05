@@ -1,3 +1,5 @@
+use crossterm::cursor::SetCursorStyle;
+use crossterm::ExecutableCommand;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -249,6 +251,13 @@ pub fn render_with_options(
                 x: inner.x + cursor_screen_col,
                 y: inner.y + cursor_screen_row,
             });
+            // Apply cursor shape based on editor mode
+            let cursor_style = match editor.cursor_shape() {
+                crate::CursorShape::Block => SetCursorStyle::SteadyBlock,
+                crate::CursorShape::Bar => SetCursorStyle::SteadyBar,
+                crate::CursorShape::Underline => SetCursorStyle::SteadyUnderScore,
+            };
+            let _ = std::io::stdout().execute(cursor_style);
         }
 
         rendered_lines.push(Line::from(spans));

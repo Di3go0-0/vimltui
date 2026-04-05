@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Linewise detection for system clipboard paste** — content from the system clipboard that ends with `\n` is now correctly detected as linewise, so pasting a yanked line inserts it on a new line (like Vim) instead of inline.
 - **Multi-line clipboard paste collapsed into one line** — copying a multi-line block from another editor instance or external program and pasting with `p`/`P` now correctly inserts each line separately. Previously, content with internal newlines but not ending in `\n` was treated as characterwise and dumped into a single line.
 - **`Ctrl+V` paste in search (`/`) and command (`:`) modes** — system clipboard content can now be pasted into the search and command input buffers with `Ctrl+V`. Only the first line is used. Previously, `Ctrl+V` was silently ignored in these modes.
+- **Cursor shape now changes per mode** — the renderer now applies the correct terminal cursor shape: block for Normal/Visual, bar for Insert, underline for Replace (`R`) and single-char replace (`r`). Previously `cursor_shape()` returned the right value but the renderer never applied it.
 
 ### Code quality
 
