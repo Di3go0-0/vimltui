@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.6] - 2026-04-05
 
+### Added
+
+- **Gutter diff signs** — optional sign column for visual diff indicators (`GutterSign` enum). Consumers populate `VimEditor::gutter_signs` to show added (green `│`), modified (yellow `│`), deleted-above (red `▲`), and deleted-below (red `▼`) markers in the gutter. Line numbers change color for added/modified lines. When `gutter_signs` is empty, rendering is unchanged (zero overhead).
+- **Sign theme colors** — `VimTheme` gains `sign_added`, `sign_modified`, `sign_deleted` color fields.
+
 ### Fixed
 
 - **`p`/`P` now read from system clipboard** — previously, paste only used the internal `unnamed_register`, ignoring the system clipboard. This broke paste between different editor instances within the same app and from external programs. Now `p`/`P` always try `wl-paste`/`xclip`/`xsel` first, falling back to the internal register only if no clipboard tool is available.
