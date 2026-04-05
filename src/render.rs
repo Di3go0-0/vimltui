@@ -191,11 +191,11 @@ pub fn render_with_options(
         // Sign column (only when gutter config is active)
         if let Some(g) = gutter.filter(|g| !g.signs.is_empty()) {
             let (sign_char, sign_style) = match sign {
-                Some(GutterSign::Added) => ("│", Style::default().fg(g.sign_added)),
-                Some(GutterSign::Modified) => ("│", Style::default().fg(g.sign_modified)),
-                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(g.sign_deleted)),
-                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(g.sign_deleted)),
-                None => (" ", bg_style),
+                Some(GutterSign::Added) => ("│ ", Style::default().fg(g.sign_added)),
+                Some(GutterSign::Modified) => ("│ ", Style::default().fg(g.sign_modified)),
+                Some(GutterSign::DeletedAbove) => ("▲ ", Style::default().fg(g.sign_deleted)),
+                Some(GutterSign::DeletedBelow) => ("▼ ", Style::default().fg(g.sign_deleted)),
+                None => ("  ", bg_style),
             };
             spans.push(Span::styled(sign_char, sign_style));
         }
