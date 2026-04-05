@@ -80,6 +80,7 @@
 pub mod editor;
 pub mod render;
 
+use std::collections::HashMap;
 use crossterm::event::KeyEvent;
 use ratatui::style::Color;
 use ratatui::text::Span;
@@ -257,6 +258,34 @@ pub enum GutterSign {
     DeletedBelow,
 }
 
+/// Configuration for gutter diff signs.
+///
+/// Set [`VimEditor::gutter`] to `Some(GutterConfig { .. })` to enable
+/// diff indicators in the gutter. When `None` (the default), rendering
+/// is unchanged.
+#[derive(Debug, Clone)]
+pub struct GutterConfig {
+    /// Signs per line index.
+    pub signs: HashMap<usize, GutterSign>,
+    /// Color for "added" signs and line numbers (default: `Green`).
+    pub sign_added: Color,
+    /// Color for "modified" signs and line numbers (default: `Yellow`).
+    pub sign_modified: Color,
+    /// Color for "deleted" signs (default: `Red`).
+    pub sign_deleted: Color,
+}
+
+impl Default for GutterConfig {
+    fn default() -> Self {
+        Self {
+            signs: HashMap::new(),
+            sign_added: Color::Green,
+            sign_modified: Color::Yellow,
+            sign_deleted: Color::Red,
+        }
+    }
+}
+
 /// Direction for `f`/`F`/`t`/`T` character find motions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FindDirection {
@@ -290,12 +319,6 @@ pub struct VimTheme {
     pub yank_highlight_bg: Color,
     /// Background for live substitution replacement preview.
     pub substitute_preview_bg: Color,
-    /// Color for "added" gutter signs. Falls back to `Green` when `None`.
-    pub sign_added: Option<Color>,
-    /// Color for "modified" gutter signs. Falls back to `Yellow` when `None`.
-    pub sign_modified: Option<Color>,
-    /// Color for "deleted" gutter signs. Falls back to `Red` when `None`.
-    pub sign_deleted: Option<Color>,
 }
 
 /// Trait for language-specific syntax highlighting.

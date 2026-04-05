@@ -94,7 +94,8 @@ pub fn render_with_options(
     // Render lines -- each line is padded to full widget width to prevent ghosting
     let line_count_width = format!("{}", editor.lines.len()).len().max(3);
     let bg_style = Style::default().bg(theme.editor_bg);
-    let has_signs = !editor.gutter_signs.is_empty();
+    let gutter = editor.gutter.as_ref();
+    let has_signs = gutter.is_some_and(|g| !g.signs.is_empty());
     let sign_col_width: usize = if has_signs { 1 } else { 0 };
     let num_col_width = line_count_width + 2 + sign_col_width;
     let available_text_width = full_width.saturating_sub(num_col_width);
@@ -152,7 +153,7 @@ pub fn render_with_options(
         };
 
         // Relative line numbers (like nvim set relativenumber + number)
-        let sign = editor.gutter_signs.get(&line_idx);
+        let sign = gutter.and_then(|g| g.signs.get(&line_idx));
 
         let line_num = if has_signs {
             if is_cursor_line {
@@ -168,28 +169,32 @@ pub fn render_with_options(
             format!("{:>width$}  ", distance, width = line_count_width)
         };
 
-        let sign_added_color = theme.sign_added.unwrap_or(Color::Green);
-        let sign_modified_color = theme.sign_modified.unwrap_or(Color::Yellow);
-        let sign_deleted_color = theme.sign_deleted.unwrap_or(Color::Red);
-
-        let num_style = match sign {
-            Some(GutterSign::Added) => Style::default().fg(sign_added_color),
-            Some(GutterSign::Modified) => Style::default().fg(sign_modified_color),
-            _ if is_cursor_line => Style::default()
-                .fg(theme.line_nr_active)
-                .add_modifier(Modifier::BOLD),
-            _ => Style::default().fg(theme.line_nr),
+        // Sign colors (only resolved when gutter is active)
+        let num_style = if let (Some(sign), Some(g)) = (sign, gutter) {
+            match sign {
+                GutterSign::Added => Style::default().fg(g.sign_added),
+                GutterSign::Modified => Style::default().fg(g.sign_modified),
+                _ => if is_cursor_line {
+                    Style::default().fg(theme.line_nr_active).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(theme.line_nr)
+                },
+            }
+        } else if is_cursor_line {
+            Style::default().fg(theme.line_nr_active).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(theme.line_nr)
         };
 
         let mut spans: Vec<Span> = vec![Span::styled(line_num, num_style)];
 
-        // Sign column (only when signs are active)
-        if has_signs {
+        // Sign column (only when gutter config is active)
+        if let Some(g) = gutter.filter(|g| !g.signs.is_empty()) {
             let (sign_char, sign_style) = match sign {
-                Some(GutterSign::Added) => ("│", Style::default().fg(sign_added_color)),
-                Some(GutterSign::Modified) => ("│", Style::default().fg(sign_modified_color)),
-                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(sign_deleted_color)),
-                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(sign_deleted_color)),
+                Some(GutterSign::Added) => ("│", Style::default().fg(g.sign_added)),
+                Some(GutterSign::Modified) => ("│", Style::default().fg(g.sign_modified)),
+                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(g.sign_deleted)),
+                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(g.sign_deleted)),
                 None => (" ", bg_style),
             };
             spans.push(Span::styled(sign_char, sign_style));
