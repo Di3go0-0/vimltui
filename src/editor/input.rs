@@ -51,6 +51,7 @@ impl VimEditor {
     // --- Search Input ---
 
     fn handle_search_input(&mut self, key: KeyEvent) -> EditorAction {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => {
                 self.cancel_search();
@@ -64,7 +65,15 @@ impl VimEditor {
                 self.search.input_buffer.pop();
                 EditorAction::Handled
             }
-            KeyCode::Char(c) => {
+            KeyCode::Char('v') if ctrl => {
+                if let Some(text) = Self::read_system_clipboard() {
+                    // Only use first line for search
+                    let first_line = text.lines().next().unwrap_or("");
+                    self.search.input_buffer.push_str(first_line);
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char(c) if !ctrl => {
                 self.search.input_buffer.push(c);
                 EditorAction::Handled
             }
@@ -75,6 +84,7 @@ impl VimEditor {
     // --- Command Input (:) ---
 
     fn handle_command_input(&mut self, key: KeyEvent) -> EditorAction {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => {
                 self.command_active = false;
@@ -106,7 +116,14 @@ impl VimEditor {
                 }
                 EditorAction::Handled
             }
-            KeyCode::Char(c) => {
+            KeyCode::Char('v') if ctrl => {
+                if let Some(text) = Self::read_system_clipboard() {
+                    let first_line = text.lines().next().unwrap_or("");
+                    self.command_buffer.push_str(first_line);
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char(c) if !ctrl => {
                 self.command_buffer.push(c);
                 EditorAction::Handled
             }
