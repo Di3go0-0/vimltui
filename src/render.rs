@@ -96,8 +96,7 @@ pub fn render_with_options(
     let bg_style = Style::default().bg(theme.editor_bg);
     let gutter = editor.gutter.as_ref();
     let has_signs = gutter.is_some_and(|g| !g.signs.is_empty());
-    let sign_col_width: usize = if has_signs { 1 } else { 0 };
-    let num_col_width = line_count_width + 2 + sign_col_width;
+    let num_col_width = line_count_width + 2; // always the same, sign replaces a space
     let available_text_width = full_width.saturating_sub(num_col_width);
 
     // Use preview lines (live substitution) if available, otherwise normal lines
@@ -127,11 +126,7 @@ pub fn render_with_options(
         let line_idx = editor.scroll_offset + screen_row;
         if line_idx >= display_lines.len() {
             // Tilde for empty lines past end of file
-            let prefix = if has_signs {
-                format!("{:>width$}   ", "~", width = line_count_width)
-            } else {
-                format!("{:>width$}  ", "~", width = line_count_width)
-            };
+            let prefix = format!("{:>width$}  ", "~", width = line_count_width);
             let used = prefix.len();
             let mut spans = vec![
                 Span::styled(prefix, Style::default().fg(theme.dim)),
@@ -188,14 +183,14 @@ pub fn render_with_options(
 
         let mut spans: Vec<Span> = vec![Span::styled(line_num, num_style)];
 
-        // Sign column (only when gutter config is active)
+        // Sign column — replaces the second padding space, no extra width
         if let Some(g) = gutter.filter(|g| !g.signs.is_empty()) {
             let (sign_char, sign_style) = match sign {
-                Some(GutterSign::Added) => ("│ ", Style::default().fg(g.sign_added)),
-                Some(GutterSign::Modified) => ("│ ", Style::default().fg(g.sign_modified)),
-                Some(GutterSign::DeletedAbove) => ("▲ ", Style::default().fg(g.sign_deleted)),
-                Some(GutterSign::DeletedBelow) => ("▼ ", Style::default().fg(g.sign_deleted)),
-                None => ("  ", bg_style),
+                Some(GutterSign::Added) => ("│", Style::default().fg(g.sign_added)),
+                Some(GutterSign::Modified) => ("│", Style::default().fg(g.sign_modified)),
+                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(g.sign_deleted)),
+                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(g.sign_deleted)),
+                None => (" ", bg_style),
             };
             spans.push(Span::styled(sign_char, sign_style));
         }
