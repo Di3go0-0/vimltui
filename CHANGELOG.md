@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-04-05
+
+### Fixed
+
+- **`p`/`P` now read from system clipboard** — previously, paste only used the internal `unnamed_register`, ignoring the system clipboard. This broke paste between different editor instances within the same app and from external programs. Now `p`/`P` always try `wl-paste`/`xclip`/`xsel` first, falling back to the internal register only if no clipboard tool is available.
+- **Linewise detection for system clipboard paste** — content from the system clipboard that ends with `\n` is now correctly detected as linewise, so pasting a yanked line inserts it on a new line (like Vim) instead of inline.
+
+### Code quality
+
+- Extracted `read_system_clipboard() -> Option<String>` as the inverse of the existing `copy_to_system_clipboard`, using the same tool priority order (Wayland → X11 xclip → X11 xsel).
+- Removed dead `use_system_clipboard` flag assignments — the flag was set but never read since yank always writes to the system clipboard and paste now always reads from it.
+
 ## [0.1.5] - 2026-04-04
 
 ### Fixed
