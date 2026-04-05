@@ -290,12 +290,12 @@ pub struct VimTheme {
     pub yank_highlight_bg: Color,
     /// Background for live substitution replacement preview.
     pub substitute_preview_bg: Color,
-    /// Color for "added" gutter signs (default: Green).
-    pub sign_added: Color,
-    /// Color for "modified" gutter signs (default: Yellow).
-    pub sign_modified: Color,
-    /// Color for "deleted" gutter signs (default: Red).
-    pub sign_deleted: Color,
+    /// Color for "added" gutter signs. Falls back to `Green` when `None`.
+    pub sign_added: Option<Color>,
+    /// Color for "modified" gutter signs. Falls back to `Yellow` when `None`.
+    pub sign_modified: Option<Color>,
+    /// Color for "deleted" gutter signs. Falls back to `Red` when `None`.
+    pub sign_deleted: Option<Color>,
 }
 
 /// Trait for language-specific syntax highlighting.

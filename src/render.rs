@@ -168,9 +168,13 @@ pub fn render_with_options(
             format!("{:>width$}  ", distance, width = line_count_width)
         };
 
+        let sign_added_color = theme.sign_added.unwrap_or(Color::Green);
+        let sign_modified_color = theme.sign_modified.unwrap_or(Color::Yellow);
+        let sign_deleted_color = theme.sign_deleted.unwrap_or(Color::Red);
+
         let num_style = match sign {
-            Some(GutterSign::Added) => Style::default().fg(theme.sign_added),
-            Some(GutterSign::Modified) => Style::default().fg(theme.sign_modified),
+            Some(GutterSign::Added) => Style::default().fg(sign_added_color),
+            Some(GutterSign::Modified) => Style::default().fg(sign_modified_color),
             _ if is_cursor_line => Style::default()
                 .fg(theme.line_nr_active)
                 .add_modifier(Modifier::BOLD),
@@ -182,10 +186,10 @@ pub fn render_with_options(
         // Sign column (only when signs are active)
         if has_signs {
             let (sign_char, sign_style) = match sign {
-                Some(GutterSign::Added) => ("│", Style::default().fg(theme.sign_added)),
-                Some(GutterSign::Modified) => ("│", Style::default().fg(theme.sign_modified)),
-                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(theme.sign_deleted)),
-                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(theme.sign_deleted)),
+                Some(GutterSign::Added) => ("│", Style::default().fg(sign_added_color)),
+                Some(GutterSign::Modified) => ("│", Style::default().fg(sign_modified_color)),
+                Some(GutterSign::DeletedAbove) => ("▲", Style::default().fg(sign_deleted_color)),
+                Some(GutterSign::DeletedBelow) => ("▼", Style::default().fg(sign_deleted_color)),
                 None => (" ", bg_style),
             };
             spans.push(Span::styled(sign_char, sign_style));
