@@ -242,26 +242,56 @@ fn render_command_line(
         height: 1,
     };
 
-    let (cmd_text, cmd_style) = if !editor.command_line.is_empty() {
+    // Left side: mode / command / search / diagnostic
+    let (left_text, left_style) = if !editor.command_line.is_empty() {
         (editor.command_line.clone(), Style::default().fg(theme.accent))
     } else {
-        (
-            format!(" {}:{} ", editor.cursor_row + 1, editor.cursor_col + 1),
-            Style::default().fg(theme.dim),
-        )
+        (String::new(), bg_style)
     };
 
-    let cmd_used = UnicodeWidthStr::width(cmd_text.as_str());
-    let mut cmd_spans = vec![Span::styled(cmd_text, cmd_style)];
-    if cmd_used < full_width {
-        cmd_spans.push(Span::styled(" ".repeat(full_width - cmd_used), bg_style));
+    // Right side: row,col    All/Top/Bot/XX%
+    let right_text = format!(
+        "{},{}    {}",
+        editor.cursor_row + 1,
+        editor.cursor_col + 1,
+        file_position(editor),
+    );
+
+    let left_width = UnicodeWidthStr::width(left_text.as_str());
+    let right_width = UnicodeWidthStr::width(right_text.as_str());
+
+    let mut cmd_spans = Vec::new();
+    cmd_spans.push(Span::styled(left_text, left_style));
+
+    // Fill gap between left and right
+    let gap = full_width.saturating_sub(left_width + right_width);
+    if gap > 0 {
+        cmd_spans.push(Span::styled(" ".repeat(gap), bg_style));
     }
+    cmd_spans.push(Span::styled(right_text, Style::default().fg(theme.dim)));
 
     frame.render_widget(Clear, cmd_area);
     frame.render_widget(
         Paragraph::new(Line::from(cmd_spans)).style(bg_style),
         cmd_area,
     );
+}
+
+/// Compute Vim-style file position indicator: `All`, `Top`, `Bot`, or `XX%`.
+fn file_position(editor: &VimEditor) -> String {
+    let total = editor.lines.len();
+    let visible = editor.visible_height;
+
+    if total <= visible {
+        "All".into()
+    } else if editor.scroll_offset == 0 {
+        "Top".into()
+    } else if editor.scroll_offset + visible >= total {
+        "Bot".into()
+    } else {
+        let pct = (editor.cursor_row + 1) * 100 / total;
+        format!("{}%", pct)
+    }
 }
 
 /// Pad spans to fill `full_width` starting from `used` characters.
