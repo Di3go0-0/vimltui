@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-04-06
+
+### Added
+
+- **Visual block editing (`Ctrl+V` block operations)**:
+  - `I` (Shift+I) — insert text at the left column of the block; edits on the first line are replayed on all selected rows when pressing Esc.
+  - `A` (Shift+A) — append text after the right column of the block; same replay-on-Esc behavior.
+  - `c` — delete the block columns and enter insert mode; replacement text is replicated across all rows on Esc.
+  - `r` + char — replace every character in the block selection with a single character.
+
+- **Line-by-line scrolling (`Ctrl+e` / `Ctrl+y`)** — scroll the viewport one line down or up without moving the cursor (unless it would leave the visible area). Works in Normal and Visual modes.
+
+- **`ToggleComment` / `ToggleBlockComment` editor actions** — `gcc` in Normal mode returns `EditorAction::ToggleComment`; `gc` in Visual mode returns `EditorAction::ToggleBlockComment { start_row, end_row }`. The consumer (e.g. dbtui) implements the actual commenting logic.
+
+### Fixed
+
+- **`yy` on a single line then `p` pasted inline instead of as a new line** — linewise yanks now append a trailing `\n` when copying to the system clipboard, so `resolve_paste_register()` correctly detects single-line yanks as linewise.
+- **`Ctrl+e` scroll did nothing / `Ctrl+y` had no effect** — `ensure_cursor_visible()` had a hard `max_offset` clamp that reset the scroll after every keystroke; removed so the viewport can scroll freely past the last screenful (showing `~` tildes). Scroll methods now push the cursor respecting `SCROLLOFF` so `ensure_cursor_visible` doesn't undo the scroll.
+
 ## [0.1.7] - 2026-04-06
 
 ### Fixed
