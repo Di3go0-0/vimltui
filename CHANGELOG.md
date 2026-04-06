@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-04-06
+
+### Fixed
+
+- **`p`/`P` in visual mode now replaces selection** — pressing `p` or `P` while in visual mode (char, line, or block) now deletes the selection and pastes the register/clipboard content in its place, matching standard Vim behavior. Previously, `p` was silently ignored in visual mode.
+- **`x` in normal mode now copies to system clipboard** — deleted characters are now written to the system clipboard (via `wl-copy`/`xclip`/`xsel`), so they can be pasted in other applications or with `p`. Previously, `x` only saved to the internal unnamed register.
+- **`x` with count accumulated correctly** — `3x` now puts all three deleted characters into the register. Previously, each iteration of the loop overwrote the register, keeping only the last character.
+
 ## [0.1.6] - 2026-04-05
 
 ### Added

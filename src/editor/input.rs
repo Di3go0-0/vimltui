@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::VimEditor;
 use super::motions::Motion;
-use crate::{EditorAction, FindDirection, Operator, VimMode, VisualKind};
+use crate::{EditorAction, FindDirection, Operator, Register, VimMode, VisualKind};
 
 enum SubRange {
     Current,
@@ -618,8 +618,23 @@ impl VimEditor {
             KeyCode::Char('x') => {
                 let n = self.take_count();
                 self.save_undo();
+                let mut deleted = String::new();
                 for _ in 0..n {
-                    self.delete_char_at_cursor();
+                    if self.cursor_row < self.lines.len()
+                        && self.cursor_col < self.lines[self.cursor_row].len()
+                    {
+                        let ch = self.lines[self.cursor_row].remove(self.cursor_col);
+                        deleted.push(ch);
+                        self.modified = true;
+                    }
+                }
+                if !deleted.is_empty() {
+                    self.unnamed_register = Register {
+                        content: deleted.clone(),
+                        linewise: false,
+                    };
+                    self.copy_to_system_clipboard(&deleted);
+                    self.clamp_cursor();
                 }
                 EditorAction::Handled
             }
@@ -1452,6 +1467,11 @@ impl VimEditor {
             KeyCode::Char('y') => {
                 self.pending_count = None;
                 self.visual_yank();
+                EditorAction::Handled
+            }
+            KeyCode::Char('p') | KeyCode::Char('P') => {
+                self.pending_count = None;
+                self.visual_paste();
                 EditorAction::Handled
             }
             KeyCode::Char('c') => {

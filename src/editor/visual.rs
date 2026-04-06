@@ -212,6 +212,37 @@ impl VimEditor {
         }
     }
 
+    /// Paste over visual selection (replace selection with register content)
+    pub fn visual_paste(&mut self) {
+        if self.visual_kind().is_some() {
+            // Save the register content BEFORE deleting (delete overwrites it)
+            let paste_reg = self.resolve_paste_register();
+            if paste_reg.content.is_empty() {
+                return;
+            }
+
+            // Delete the selection (this sets unnamed_register to deleted text)
+            self.visual_delete();
+
+            // Now insert the saved register content at cursor position
+            if paste_reg.linewise {
+                let new_lines: Vec<String> =
+                    paste_reg.content.lines().map(String::from).collect();
+                let insert_at = self.cursor_row;
+                for (i, line) in new_lines.into_iter().enumerate() {
+                    self.lines.insert(insert_at + i, line);
+                }
+                self.cursor_row = insert_at;
+                self.cursor_col = 0;
+            } else {
+                let col = self.cursor_col.min(self.lines[self.cursor_row].len());
+                self.lines[self.cursor_row].insert_str(col, &paste_reg.content);
+                self.cursor_col = col + paste_reg.content.len().saturating_sub(1);
+            }
+            self.modified = true;
+        }
+    }
+
     /// Indent visual selection
     pub fn visual_indent(&mut self) {
         if let Some(((sr, _), (er, _))) = self.visual_range() {
