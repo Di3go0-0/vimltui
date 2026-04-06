@@ -1,7 +1,7 @@
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Span;
 
-use crate::{DiagnosticSign, GutterConfig, GutterSign, VimTheme};
+use crate::{Diagnostic, DiagnosticSeverity, GutterConfig, GutterSign, VimTheme};
 
 /// Total character width of the gutter column.
 ///
@@ -93,13 +93,13 @@ pub fn render_tilde<'a>(
 
 /// Diagnostic icon and color for the left column.
 fn diag_display(
-    diag: Option<&DiagnosticSign>,
+    diag: Option<&Diagnostic>,
     g: &GutterConfig,
     bg_style: Style,
 ) -> (&'static str, Style) {
-    match diag {
-        Some(DiagnosticSign::Error) => ("✘", Style::default().fg(g.sign_error)),
-        Some(DiagnosticSign::Warning) => ("⚠", Style::default().fg(g.sign_warning)),
+    match diag.map(|d| &d.severity) {
+        Some(DiagnosticSeverity::Error) => ("✘", Style::default().fg(g.sign_error)),
+        Some(DiagnosticSeverity::Warning) => ("⚠", Style::default().fg(g.sign_warning)),
         None => (" ", bg_style),
     }
 }
@@ -121,7 +121,7 @@ fn diff_display(
 
 /// Line-number color: diagnostic takes priority, then diff sign, then default.
 fn num_color(
-    diag: Option<&DiagnosticSign>,
+    diag: Option<&Diagnostic>,
     diff: Option<&GutterSign>,
     g: &GutterConfig,
     is_cursor_line: bool,
@@ -129,9 +129,9 @@ fn num_color(
 ) -> Style {
     // Diagnostic color wins
     if let Some(d) = diag {
-        return match d {
-            DiagnosticSign::Error => Style::default().fg(g.sign_error),
-            DiagnosticSign::Warning => Style::default().fg(g.sign_warning),
+        return match d.severity {
+            DiagnosticSeverity::Error => Style::default().fg(g.sign_error),
+            DiagnosticSeverity::Warning => Style::default().fg(g.sign_warning),
         };
     }
     // Diff sign color

@@ -158,6 +158,12 @@ pub enum EditorAction {
     /// Toggle block comment on the visual selection (`gc` in Visual mode).
     /// Contains (start_row, end_row) of the selection.
     ToggleBlockComment { start_row: usize, end_row: usize },
+    /// Go to definition at cursor position (`gd` in Normal mode).
+    /// The consumer implements the actual navigation.
+    GoToDefinition,
+    /// Show hover/documentation at cursor position (`K` in Normal mode).
+    /// The consumer implements the actual display.
+    Hover,
 }
 
 /// Leader key (space by default, like modern Neovim setups).
@@ -274,17 +280,29 @@ pub enum GutterSign {
     DeletedBelow,
 }
 
-/// A diagnostic sign for a specific line, rendered to the LEFT of the line number.
+/// Diagnostic severity level, determines the icon and color in the gutter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiagnosticSeverity {
+    /// Error — red `✘`.
+    Error,
+    /// Warning — yellow `⚠`.
+    Warning,
+}
+
+/// A diagnostic for a specific line, rendered to the LEFT of the line number.
 ///
 /// Consumers populate [`GutterConfig::diagnostics`] with these values.
 /// When non-empty, the gutter reserves 2 extra characters for the diagnostic
 /// column (`[icon][space]`). When empty, no extra space is used.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DiagnosticSign {
-    /// Error on this line — red `✘`.
-    Error,
-    /// Warning on this line — yellow `⚠`.
-    Warning,
+///
+/// When the cursor is on a line with a diagnostic that has a `message`,
+/// the message is shown in the command line.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    /// Severity level (determines icon and color).
+    pub severity: DiagnosticSeverity,
+    /// Optional message shown in the command line when the cursor is on this line.
+    pub message: Option<String>,
 }
 
 /// Configuration for gutter signs and diagnostics.
@@ -302,8 +320,8 @@ pub enum DiagnosticSign {
 pub struct GutterConfig {
     /// Diff signs per line index (right of number).
     pub signs: HashMap<usize, GutterSign>,
-    /// Diagnostic signs per line index (left of number).
-    pub diagnostics: HashMap<usize, DiagnosticSign>,
+    /// Diagnostics per line index (left of number).
+    pub diagnostics: HashMap<usize, Diagnostic>,
     /// Color for "added" signs and line numbers (default: `Green`).
     pub sign_added: Color,
     /// Color for "modified" signs and line numbers (default: `Yellow`).

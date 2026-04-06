@@ -21,6 +21,19 @@ struct SubstituteCmd {
 impl VimEditor {
     /// Main input handler. Returns EditorAction to inform the parent.
     pub fn handle_key(&mut self, key: KeyEvent) -> EditorAction {
+        // Record macro keys (except the q that stops recording)
+        let is_stop_recording = self.recording_macro.is_some()
+            && !self.pending_macro_record
+            && key.code == KeyCode::Char('q')
+            && !key.modifiers.contains(KeyModifiers::CONTROL)
+            && matches!(self.mode, VimMode::Normal)
+            && !self.command_active
+            && !self.search.active;
+
+        if self.recording_macro.is_some() && !is_stop_recording {
+            self.macro_buffer.push(key);
+        }
+
         // Command mode (:) takes highest priority
         if self.command_active {
             let action = self.handle_command_input(key);
@@ -391,6 +404,77 @@ impl VimEditor {
         // Handle pending text object (inner/around)
         if let Some(around) = self.pending_text_object.take() {
             return self.handle_text_object_key(key, around);
+        }
+
+        // Handle pending mark set (m + char)
+        if self.pending_mark {
+            self.pending_mark = false;
+            if let KeyCode::Char(c) = key.code {
+                if c.is_ascii_lowercase() {
+                    self.marks.insert(c, (self.cursor_row, self.cursor_col));
+                }
+            }
+            return EditorAction::Handled;
+        }
+
+        // Handle pending goto mark (' or `)
+        if let Some(exact) = self.pending_goto_mark.take() {
+            if let KeyCode::Char(c) = key.code {
+                if let Some(&(row, col)) = self.marks.get(&c) {
+                    self.cursor_row = row.min(self.lines.len().saturating_sub(1));
+                    if exact {
+                        self.cursor_col = col.min(self.current_line_len().saturating_sub(1));
+                    } else {
+                        self.move_to_first_non_blank();
+                    }
+                }
+            }
+            return EditorAction::Handled;
+        }
+
+        // Handle pending bracket (] or [) + char
+        if let Some(bracket) = self.pending_bracket.take() {
+            if let KeyCode::Char('d') = key.code {
+                if bracket == ']' {
+                    self.jump_to_next_diagnostic();
+                } else {
+                    self.jump_to_prev_diagnostic();
+                }
+            }
+            return EditorAction::Handled;
+        }
+
+        // Handle pending macro record (q + char)
+        if self.pending_macro_record {
+            self.pending_macro_record = false;
+            if let KeyCode::Char(c) = key.code {
+                if c.is_ascii_lowercase() {
+                    self.recording_macro = Some(c);
+                    self.macro_buffer.clear();
+                }
+            }
+            return EditorAction::Handled;
+        }
+
+        // Handle pending macro play (@ + char)
+        if self.pending_macro_play {
+            self.pending_macro_play = false;
+            if let KeyCode::Char(c) = key.code {
+                let reg = if c == '@' {
+                    self.last_macro
+                } else {
+                    Some(c)
+                };
+                if let Some(r) = reg {
+                    self.last_macro = Some(r);
+                    if let Some(keys) = self.macro_registers.get(&r).cloned() {
+                        for k in keys {
+                            self.handle_key(k);
+                        }
+                    }
+                }
+            }
+            return EditorAction::Handled;
         }
 
         // Count prefix (digits)
@@ -886,6 +970,54 @@ impl VimEditor {
                 EditorAction::Handled
             }
 
+            // --- Marks ---
+            KeyCode::Char('m') => {
+                self.pending_mark = true;
+                EditorAction::Handled
+            }
+            KeyCode::Char('\'') => {
+                self.pending_goto_mark = Some(false); // line-wise
+                EditorAction::Handled
+            }
+            KeyCode::Char('`') => {
+                self.pending_goto_mark = Some(true); // exact position
+                EditorAction::Handled
+            }
+
+            // --- Bracket navigation ---
+            KeyCode::Char(']') => {
+                self.pending_bracket = Some(']');
+                EditorAction::Handled
+            }
+            KeyCode::Char('[') => {
+                self.pending_bracket = Some('[');
+                EditorAction::Handled
+            }
+
+            // --- Macros ---
+            KeyCode::Char('q') if !ctrl => {
+                if self.recording_macro.is_some() {
+                    // Stop recording
+                    let reg = self.recording_macro.take().unwrap();
+                    let keys = std::mem::take(&mut self.macro_buffer);
+                    self.macro_registers.insert(reg, keys);
+                } else {
+                    // Start recording: wait for register char
+                    self.pending_macro_record = true;
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('@') => {
+                self.pending_macro_play = true;
+                EditorAction::Handled
+            }
+
+            // --- Hover (K) ---
+            KeyCode::Char('K') => {
+                self.pending_count = None;
+                EditorAction::Hover
+            }
+
             // --- z-prefix ---
             KeyCode::Char('z') => {
                 self.pending_z = true;
@@ -938,6 +1070,11 @@ impl VimEditor {
                 self.pending_find = None;
                 self.pending_replace = false;
                 self.pending_text_object = None;
+                self.pending_mark = false;
+                self.pending_goto_mark = None;
+                self.pending_bracket = None;
+                self.pending_macro_record = false;
+                self.pending_macro_play = false;
                 self.search.pattern.clear();
                 EditorAction::Unhandled(key)
             }
@@ -956,6 +1093,10 @@ impl VimEditor {
                     self.move_to_top();
                 }
                 EditorAction::Handled
+            }
+            KeyCode::Char('d') => {
+                self.pending_count = None;
+                EditorAction::GoToDefinition
             }
             KeyCode::Char('c') => {
                 // gc in Normal mode: wait for second 'c' → toggle line comment

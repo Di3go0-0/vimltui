@@ -4,6 +4,8 @@ pub mod operators;
 pub mod search;
 pub mod visual;
 
+use std::collections::HashMap;
+
 use crate::{
     BlockInsertState, EditRecord, FindDirection, GutterConfig, Operator, Register, SearchState,
     Snapshot, VimMode, VimModeConfig, YankHighlight, SCROLLOFF,
@@ -47,11 +49,25 @@ pub struct VimEditor {
     pub pending_z: bool, // for z-prefix (zz, zt, zb)
     pub pending_gc: bool, // for gcc (toggle comment)
     pub pending_text_object: Option<bool>, // Some(false)=inner, Some(true)=around
+    pub pending_mark: bool, // for m command (set mark)
+    pub pending_goto_mark: Option<bool>, // Some(true)=exact (`), Some(false)=line (')
+    pub pending_bracket: Option<char>, // for ]d, [d diagnostic navigation
+    pub pending_macro_record: bool, // waiting for register char after q
+    pub pending_macro_play: bool, // waiting for register char after @
 
-    // Repeat
+    // Repeat (dot)
     pub last_edit: Option<EditRecord>,
     pub recording_edit: Vec<crossterm::event::KeyEvent>,
     pub is_recording: bool,
+
+    // Marks: char → (row, col)
+    pub marks: HashMap<char, (usize, usize)>,
+
+    // Macros: register → recorded keys
+    pub macro_registers: HashMap<char, Vec<crossterm::event::KeyEvent>>,
+    pub recording_macro: Option<char>,
+    pub macro_buffer: Vec<crossterm::event::KeyEvent>,
+    pub last_macro: Option<char>,
 
     // Block insert (visual block I/A/c)
     pub block_insert: Option<BlockInsertState>,
@@ -110,9 +126,19 @@ impl VimEditor {
             pending_z: false,
             pending_gc: false,
             pending_text_object: None,
+            pending_mark: false,
+            pending_goto_mark: None,
+            pending_bracket: None,
+            pending_macro_record: false,
+            pending_macro_play: false,
             last_edit: None,
             recording_edit: Vec::new(),
             is_recording: false,
+            marks: HashMap::new(),
+            macro_registers: HashMap::new(),
+            recording_macro: None,
+            macro_buffer: Vec::new(),
+            last_macro: None,
             block_insert: None,
             yank_highlight: None,
             modified: false,
@@ -550,7 +576,7 @@ impl VimEditor {
                     }
                     s
                 } else {
-                    String::new()
+                    self.diagnostic_message_at_cursor().unwrap_or_default()
                 }
             }
             VimMode::Insert => "-- INSERT --".to_string(),
@@ -564,6 +590,21 @@ impl VimEditor {
                 format!("-- {} --", label)
             }
         };
+        // Append macro recording indicator
+        if let Some(reg) = self.recording_macro {
+            if self.command_line.is_empty() {
+                self.command_line = format!("recording @{}", reg);
+            } else {
+                self.command_line = format!("{}  recording @{}", self.command_line, reg);
+            }
+        }
+    }
+
+    /// Get the diagnostic message for the line at the cursor, if any.
+    fn diagnostic_message_at_cursor(&self) -> Option<String> {
+        let g = self.gutter.as_ref()?;
+        let diag = g.diagnostics.get(&self.cursor_row)?;
+        diag.message.clone()
     }
 
     /// Extract the search pattern from a partial substitution command in command_buffer.

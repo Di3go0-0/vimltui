@@ -917,6 +917,39 @@ impl VimEditor {
         Some(chars[start..=end].iter().collect())
     }
 
+    /// Jump to the next line that has a diagnostic (]d).
+    pub fn jump_to_next_diagnostic(&mut self) {
+        let diag_lines = self.sorted_diagnostic_lines();
+        if let Some(&line) = diag_lines.iter().find(|&&l| l > self.cursor_row) {
+            self.cursor_row = line;
+            self.move_to_first_non_blank();
+        } else if let Some(&line) = diag_lines.first() {
+            // Wrap around
+            self.cursor_row = line;
+            self.move_to_first_non_blank();
+        }
+    }
+
+    /// Jump to the previous line that has a diagnostic ([d).
+    pub fn jump_to_prev_diagnostic(&mut self) {
+        let diag_lines = self.sorted_diagnostic_lines();
+        if let Some(&line) = diag_lines.iter().rev().find(|&&l| l < self.cursor_row) {
+            self.cursor_row = line;
+            self.move_to_first_non_blank();
+        } else if let Some(&line) = diag_lines.last() {
+            // Wrap around
+            self.cursor_row = line;
+            self.move_to_first_non_blank();
+        }
+    }
+
+    fn sorted_diagnostic_lines(&self) -> Vec<usize> {
+        let Some(g) = &self.gutter else { return Vec::new() };
+        let mut lines: Vec<usize> = g.diagnostics.keys().copied().collect();
+        lines.sort_unstable();
+        lines
+    }
+
     fn find_inner_delimited(&self, open: char, close: char) -> Option<(usize, usize)> {
         let line = self.current_line();
         let chars: Vec<char> = line.chars().collect();
