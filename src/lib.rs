@@ -258,9 +258,9 @@ impl YankHighlight {
     }
 }
 
-/// A gutter sign for a specific line, used for diff indicators.
+/// A diff sign for a specific line, rendered to the RIGHT of the line number.
 ///
-/// Consumers populate [`VimEditor::gutter_signs`] with these values.
+/// Consumers populate [`GutterConfig::signs`] with these values.
 /// When empty, the gutter renders exactly as before (zero overhead).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GutterSign {
@@ -274,30 +274,58 @@ pub enum GutterSign {
     DeletedBelow,
 }
 
-/// Configuration for gutter diff signs.
+/// A diagnostic sign for a specific line, rendered to the LEFT of the line number.
+///
+/// Consumers populate [`GutterConfig::diagnostics`] with these values.
+/// When non-empty, the gutter reserves 2 extra characters for the diagnostic
+/// column (`[icon][space]`). When empty, no extra space is used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiagnosticSign {
+    /// Error on this line — red `✘`.
+    Error,
+    /// Warning on this line — yellow `⚠`.
+    Warning,
+}
+
+/// Configuration for gutter signs and diagnostics.
 ///
 /// Set [`VimEditor::gutter`] to `Some(GutterConfig { .. })` to enable
-/// diff indicators in the gutter. When `None` (the default), rendering
-/// is unchanged.
+/// indicators in the gutter. When `None` (the default), rendering is unchanged.
+///
+/// The gutter layout with both features active:
+/// `[diagnostic][space][number][space][diff_sign]`
+///
+/// Each column is independently optional — diagnostics only add width when
+/// the `diagnostics` map is non-empty; diff signs only replace the trailing
+/// space when the `signs` map is non-empty.
 #[derive(Debug, Clone)]
 pub struct GutterConfig {
-    /// Signs per line index.
+    /// Diff signs per line index (right of number).
     pub signs: HashMap<usize, GutterSign>,
+    /// Diagnostic signs per line index (left of number).
+    pub diagnostics: HashMap<usize, DiagnosticSign>,
     /// Color for "added" signs and line numbers (default: `Green`).
     pub sign_added: Color,
     /// Color for "modified" signs and line numbers (default: `Yellow`).
     pub sign_modified: Color,
     /// Color for "deleted" signs (default: `Red`).
     pub sign_deleted: Color,
+    /// Color for "error" diagnostic signs (default: `Red`).
+    pub sign_error: Color,
+    /// Color for "warning" diagnostic signs (default: `Yellow`).
+    pub sign_warning: Color,
 }
 
 impl Default for GutterConfig {
     fn default() -> Self {
         Self {
             signs: HashMap::new(),
+            diagnostics: HashMap::new(),
             sign_added: Color::Green,
             sign_modified: Color::Yellow,
             sign_deleted: Color::Red,
+            sign_error: Color::Red,
+            sign_warning: Color::Yellow,
         }
     }
 }
