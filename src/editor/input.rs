@@ -379,6 +379,15 @@ impl VimEditor {
             return self.handle_g_prefix(key);
         }
 
+        // Handle pending gc → wait for 'c' to toggle line comment (gcc)
+        if self.pending_gc {
+            self.pending_gc = false;
+            if key.code == KeyCode::Char('c') {
+                return EditorAction::ToggleComment;
+            }
+            return EditorAction::Handled;
+        }
+
         // Handle pending text object (inner/around)
         if let Some(around) = self.pending_text_object.take() {
             return self.handle_text_object_key(key, around);
@@ -430,7 +439,7 @@ impl VimEditor {
                 self.move_word_forward(n, true);
                 EditorAction::Handled
             }
-            KeyCode::Char('e') => {
+            KeyCode::Char('e') if !ctrl => {
                 let n = self.take_count();
                 self.move_word_end(n, false);
                 EditorAction::Handled
@@ -495,6 +504,16 @@ impl VimEditor {
             KeyCode::Char('b') if ctrl => {
                 self.pending_count = None;
                 self.full_page_up();
+                EditorAction::Handled
+            }
+            KeyCode::Char('e') if ctrl => {
+                self.pending_count = None;
+                self.scroll_line_down();
+                EditorAction::Handled
+            }
+            KeyCode::Char('y') if ctrl => {
+                self.pending_count = None;
+                self.scroll_line_up();
                 EditorAction::Handled
             }
 
@@ -938,6 +957,11 @@ impl VimEditor {
                 }
                 EditorAction::Handled
             }
+            KeyCode::Char('c') => {
+                // gc in Normal mode: wait for second 'c' → toggle line comment
+                self.pending_gc = true;
+                EditorAction::Handled
+            }
             KeyCode::Char('U') => {
                 self.pending_operator = Some(Operator::Uppercase);
                 EditorAction::Handled
@@ -1114,6 +1138,11 @@ impl VimEditor {
                 // Move cursor back one if possible (vim behavior)
                 if self.cursor_col > 0 {
                     self.cursor_col -= 1;
+                }
+                // If we were in a block insert, replay edits on the other rows
+                if self.block_insert.is_some() {
+                    let keys = self.recording_edit.clone();
+                    self.finish_block_insert(&keys);
                 }
                 self.stop_recording();
                 self.clamp_cursor();
@@ -1336,6 +1365,30 @@ impl VimEditor {
     fn handle_visual(&mut self, key: KeyEvent) -> EditorAction {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
+        // Handle pending g → gc for block comment in visual mode
+        if self.pending_g {
+            self.pending_g = false;
+            if key.code == KeyCode::Char('c') {
+                if let Some(((sr, _), (er, _))) = self.visual_range() {
+                    self.exit_visual();
+                    return EditorAction::ToggleBlockComment {
+                        start_row: sr,
+                        end_row: er,
+                    };
+                }
+            }
+            return EditorAction::Handled;
+        }
+
+        // Block replace: waiting for the replacement character after 'r'
+        if self.pending_replace {
+            self.pending_replace = false;
+            if let KeyCode::Char(ch) = key.code {
+                self.block_replace(ch);
+            }
+            return EditorAction::Handled;
+        }
+
         // Count prefix (digits) — same as normal mode
         if let KeyCode::Char(c) = key.code
             && c.is_ascii_digit() && (c != '0' || self.pending_count.is_some()) {
@@ -1392,7 +1445,7 @@ impl VimEditor {
                 self.move_word_back(n, true);
                 EditorAction::Handled
             }
-            KeyCode::Char('e') => {
+            KeyCode::Char('e') if !ctrl => {
                 let n = self.take_count();
                 self.move_word_end(n, false);
                 EditorAction::Handled
@@ -1450,6 +1503,16 @@ impl VimEditor {
                 self.full_page_up();
                 EditorAction::Handled
             }
+            KeyCode::Char('e') if ctrl => {
+                self.pending_count = None;
+                self.scroll_line_down();
+                EditorAction::Handled
+            }
+            KeyCode::Char('y') if ctrl => {
+                self.pending_count = None;
+                self.scroll_line_up();
+                EditorAction::Handled
+            }
 
             // --- Bracket matching ---
             KeyCode::Char('%') => {
@@ -1478,8 +1541,39 @@ impl VimEditor {
                 self.pending_count = None;
                 if self.config.insert_allowed {
                     self.start_recording();
-                    self.visual_delete();
-                    self.mode = VimMode::Insert;
+                    if matches!(self.mode, VimMode::Visual(VisualKind::Block)) {
+                        self.block_change_start();
+                    } else {
+                        self.visual_delete();
+                        self.mode = VimMode::Insert;
+                    }
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('I') => {
+                self.pending_count = None;
+                if self.config.insert_allowed
+                    && matches!(self.mode, VimMode::Visual(VisualKind::Block))
+                {
+                    self.start_recording();
+                    self.block_insert_start();
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('A') => {
+                self.pending_count = None;
+                if self.config.insert_allowed
+                    && matches!(self.mode, VimMode::Visual(VisualKind::Block))
+                {
+                    self.start_recording();
+                    self.block_append_start();
+                }
+                EditorAction::Handled
+            }
+            KeyCode::Char('r') => {
+                self.pending_count = None;
+                if matches!(self.mode, VimMode::Visual(VisualKind::Block)) {
+                    self.pending_replace = true;
                 }
                 EditorAction::Handled
             }

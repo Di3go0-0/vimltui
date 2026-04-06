@@ -153,6 +153,11 @@ pub enum EditorAction {
     ForceClose,
     /// Save and close (`:wq`, `:x`).
     SaveAndClose,
+    /// Toggle line comment on the current line (`gcc` in Normal mode).
+    ToggleComment,
+    /// Toggle block comment on the visual selection (`gc` in Visual mode).
+    /// Contains (start_row, end_row) of the selection.
+    ToggleBlockComment { start_row: usize, end_row: usize },
 }
 
 /// Leader key (space by default, like modern Neovim setups).
@@ -220,6 +225,17 @@ impl Default for SearchState {
 #[derive(Debug, Clone)]
 pub struct EditRecord {
     pub keys: Vec<KeyEvent>,
+}
+
+/// State saved when entering block insert/append/change mode.
+/// Used to replay the first-line edits on all other lines when Esc is pressed.
+#[derive(Debug, Clone)]
+pub struct BlockInsertState {
+    /// The rows affected by the block operation (inclusive).
+    pub start_row: usize,
+    pub end_row: usize,
+    /// The column at which text is inserted on each row.
+    pub col: usize,
 }
 
 /// Temporary highlight for yanked text (like Neovim's `vim.highlight.on_yank()`).

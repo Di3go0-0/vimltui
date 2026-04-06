@@ -1,5 +1,5 @@
 use super::VimEditor;
-use crate::{Register, VimMode, VisualKind, YankHighlight};
+use crate::{BlockInsertState, Register, VimMode, VisualKind, YankHighlight};
 
 impl VimEditor {
     /// Enter visual mode
@@ -345,6 +345,141 @@ impl VimEditor {
                 self.modified = true;
             }
             self.exit_visual();
+        }
+    }
+
+    /// Block insert (I): insert text at the left column of the block on all rows.
+    /// Enters insert mode on the first row; on Esc the edits are replayed on the rest.
+    pub fn block_insert_start(&mut self) {
+        if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+            let left = sc.min(ec);
+            self.save_undo();
+            self.block_insert = Some(BlockInsertState {
+                start_row: sr,
+                end_row: er.min(self.lines.len().saturating_sub(1)),
+                col: left,
+            });
+            self.cursor_row = sr;
+            self.cursor_col = left;
+            self.visual_anchor = None;
+            self.mode = VimMode::Insert;
+        }
+    }
+
+    /// Block append (A): insert text after the right column of the block on all rows.
+    pub fn block_append_start(&mut self) {
+        if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+            let right = sc.max(ec) + 1;
+            self.save_undo();
+            self.block_insert = Some(BlockInsertState {
+                start_row: sr,
+                end_row: er.min(self.lines.len().saturating_sub(1)),
+                col: right,
+            });
+            self.cursor_row = sr;
+            self.cursor_col = right.min(self.lines[sr].len());
+            self.visual_anchor = None;
+            self.mode = VimMode::Insert;
+        }
+    }
+
+    /// Block change (c): delete the block columns, then insert at the left column.
+    pub fn block_change_start(&mut self) {
+        if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+            let left = sc.min(ec);
+            let right = sc.max(ec) + 1;
+            self.save_undo();
+            // Delete block columns from each row
+            for row in sr..=er.min(self.lines.len().saturating_sub(1)) {
+                let line_len = self.lines[row].len();
+                let l = left.min(line_len);
+                let r = right.min(line_len);
+                if l < r {
+                    self.lines[row] = format!("{}{}", &self.lines[row][..l], &self.lines[row][r..]);
+                }
+            }
+            self.modified = true;
+            self.block_insert = Some(BlockInsertState {
+                start_row: sr,
+                end_row: er.min(self.lines.len().saturating_sub(1)),
+                col: left,
+            });
+            self.cursor_row = sr;
+            self.cursor_col = left.min(self.lines[sr].len());
+            self.visual_anchor = None;
+            self.mode = VimMode::Insert;
+        }
+    }
+
+    /// Block replace (r): replace every character in the block with a single character.
+    pub fn block_replace(&mut self, ch: char) {
+        if let Some(((sr, sc), (er, ec))) = self.visual_range() {
+            let left = sc.min(ec);
+            let right = sc.max(ec) + 1;
+            self.save_undo();
+            for row in sr..=er.min(self.lines.len().saturating_sub(1)) {
+                let line_len = self.lines[row].len();
+                let l = left.min(line_len);
+                let r = right.min(line_len);
+                if l < r {
+                    let replaced: String = self.lines[row][l..r]
+                        .chars()
+                        .map(|_| ch)
+                        .collect();
+                    self.lines[row] = format!(
+                        "{}{}{}",
+                        &self.lines[row][..l],
+                        replaced,
+                        &self.lines[row][r..]
+                    );
+                }
+            }
+            self.modified = true;
+            self.cursor_row = sr;
+            self.cursor_col = left;
+            self.exit_visual();
+        }
+    }
+
+    /// Finish a block insert: replay the recorded keystrokes on all remaining rows.
+    pub fn finish_block_insert(&mut self, keys: &[crossterm::event::KeyEvent]) {
+        if let Some(state) = self.block_insert.take() {
+            // The first row (state.start_row) was already edited live.
+            // Replay the same keystrokes on every other row.
+            for row in (state.start_row + 1)..=state.end_row.min(self.lines.len().saturating_sub(1)) {
+                let col = state.col.min(self.lines[row].len());
+                let mut insert_col = col;
+                for key in keys {
+                    match key.code {
+                        crossterm::event::KeyCode::Char(c) => {
+                            if insert_col <= self.lines[row].len() {
+                                self.lines[row].insert(insert_col, c);
+                                insert_col += 1;
+                            }
+                        }
+                        crossterm::event::KeyCode::Tab => {
+                            for _ in 0..4 {
+                                if insert_col <= self.lines[row].len() {
+                                    self.lines[row].insert(insert_col, ' ');
+                                    insert_col += 1;
+                                }
+                            }
+                        }
+                        crossterm::event::KeyCode::Backspace => {
+                            if insert_col > 0 && insert_col <= self.lines[row].len() {
+                                self.lines[row].remove(insert_col - 1);
+                                insert_col -= 1;
+                            }
+                        }
+                        crossterm::event::KeyCode::Delete => {
+                            if insert_col < self.lines[row].len() {
+                                self.lines[row].remove(insert_col);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
     }
 

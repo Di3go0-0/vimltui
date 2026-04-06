@@ -149,7 +149,15 @@ impl VimEditor {
         }
 
         // Always copy to system clipboard
-        self.copy_to_system_clipboard(&self.unnamed_register.content.clone());
+        // For linewise yanks, append a trailing newline so that clipboard-based
+        // paste (resolve_paste_register) can detect it as linewise content.
+        if linewise {
+            let mut clipboard_text = self.unnamed_register.content.clone();
+            clipboard_text.push('\n');
+            self.copy_to_system_clipboard(&clipboard_text);
+        } else {
+            self.copy_to_system_clipboard(&self.unnamed_register.content.clone());
+        }
 
         self.yank_highlight = Some(YankHighlight {
             start_row,

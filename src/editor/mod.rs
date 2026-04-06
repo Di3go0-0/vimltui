@@ -5,8 +5,8 @@ pub mod search;
 pub mod visual;
 
 use crate::{
-    EditRecord, FindDirection, GutterConfig, Operator, Register, SearchState, Snapshot, VimMode,
-    VimModeConfig, YankHighlight, SCROLLOFF,
+    BlockInsertState, EditRecord, FindDirection, GutterConfig, Operator, Register, SearchState,
+    Snapshot, VimMode, VimModeConfig, YankHighlight, SCROLLOFF,
 };
 
 /// A self-contained Vim editor instance with its own buffer, cursor, mode, and state.
@@ -45,12 +45,16 @@ pub struct VimEditor {
     pub last_find: Option<(FindDirection, bool, char)>, // for ;/, repeat
     pub pending_replace: bool, // for r command
     pub pending_z: bool, // for z-prefix (zz, zt, zb)
+    pub pending_gc: bool, // for gcc (toggle comment)
     pub pending_text_object: Option<bool>, // Some(false)=inner, Some(true)=around
 
     // Repeat
     pub last_edit: Option<EditRecord>,
     pub recording_edit: Vec<crossterm::event::KeyEvent>,
     pub is_recording: bool,
+
+    // Block insert (visual block I/A/c)
+    pub block_insert: Option<BlockInsertState>,
 
     // Yank highlight
     pub yank_highlight: Option<YankHighlight>,
@@ -104,10 +108,12 @@ impl VimEditor {
             last_find: None,
             pending_replace: false,
             pending_z: false,
+            pending_gc: false,
             pending_text_object: None,
             last_edit: None,
             recording_edit: Vec::new(),
             is_recording: false,
+            block_insert: None,
             yank_highlight: None,
             modified: false,
             command_line: String::new(),
@@ -284,11 +290,6 @@ impl VimEditor {
 
         if self.cursor_row + scrolloff >= self.scroll_offset + self.visible_height {
             self.scroll_offset = (self.cursor_row + scrolloff + 1).saturating_sub(self.visible_height);
-        }
-
-        let max_offset = self.lines.len().saturating_sub(self.visible_height);
-        if self.scroll_offset > max_offset {
-            self.scroll_offset = max_offset;
         }
     }
 

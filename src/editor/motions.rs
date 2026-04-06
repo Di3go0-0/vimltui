@@ -95,6 +95,30 @@ impl VimEditor {
         self.clamp_cursor();
     }
 
+    pub fn scroll_line_down(&mut self) {
+        // Allow scrolling until the last line is at the top (like Vim Ctrl+e).
+        let max = self.lines.len().saturating_sub(1);
+        self.scroll_offset = (self.scroll_offset + 1).min(max);
+        // Push cursor down to respect scrolloff so ensure_cursor_visible doesn't undo the scroll
+        let scrolloff = crate::SCROLLOFF.min(self.visible_height / 2);
+        let min_cursor = (self.scroll_offset + scrolloff).min(self.lines.len().saturating_sub(1));
+        if self.cursor_row < min_cursor {
+            self.cursor_row = min_cursor;
+            self.clamp_cursor();
+        }
+    }
+
+    pub fn scroll_line_up(&mut self) {
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+        // Push cursor up to respect scrolloff so ensure_cursor_visible doesn't undo the scroll
+        let scrolloff = crate::SCROLLOFF.min(self.visible_height / 2);
+        let max_cursor = (self.scroll_offset + self.visible_height).saturating_sub(scrolloff + 1);
+        if self.cursor_row > max_cursor {
+            self.cursor_row = max_cursor.min(self.lines.len().saturating_sub(1));
+            self.clamp_cursor();
+        }
+    }
+
     pub fn scroll_center(&mut self) {
         let half = self.visible_height / 2;
         self.scroll_offset = self.cursor_row.saturating_sub(half);
