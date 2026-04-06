@@ -9,26 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Diagnostic sign column (`DiagnosticSign` enum)** — new `DiagnosticSign` enum (`Error`, `Warning`) rendered to the LEFT of the line number. When `GutterConfig::diagnostics` is non-empty, the gutter reserves 2 extra characters for the `[icon][space]` prefix. Diagnostic color takes priority for the line number.
-  - `DiagnosticSign::Error` → red `✘`
-  - `DiagnosticSign::Warning` → yellow `⚠`
+- **Diagnostic system (`Diagnostic` struct, `DiagnosticSeverity` enum)** — diagnostics are rendered to the LEFT of the line number with a separate `[icon][space]` column. When `GutterConfig::diagnostics` is non-empty, the gutter reserves 2 extra characters. Diagnostic color takes priority for the line number.
+  - `DiagnosticSeverity::Error` → red `✘`
+  - `DiagnosticSeverity::Warning` → yellow `⚠`
+  - Optional `message: Option<String>` shown in the command line when the cursor is on a diagnostic line.
   - Colors customizable via `GutterConfig::sign_error` / `sign_warning`.
 
-- **Separate gutter layout for diff signs vs diagnostics** — diff signs (`GutterSign::Added`, `Modified`, `DeletedAbove`, `DeletedBelow`) render to the RIGHT of the number. Diagnostics render to the LEFT. Both can coexist on the same line.
+- **Separate gutter layout for diff signs vs diagnostics** — diff signs (`GutterSign`) render to the RIGHT of the number. Diagnostics render to the LEFT. Both can coexist on the same line and work independently.
 
   Full layout: `[diagnostic?][space?][number][space][diff_sign?]`
 
 ```rust
 use std::collections::HashMap;
-use vimltui::{GutterConfig, GutterSign, DiagnosticSign};
+use vimltui::{Diagnostic, DiagnosticSeverity, GutterConfig, GutterSign};
 
 let mut signs = HashMap::new();
 signs.insert(2, GutterSign::Added);
 signs.insert(4, GutterSign::Modified);
 
 let mut diagnostics = HashMap::new();
-diagnostics.insert(4, DiagnosticSign::Error);
-diagnostics.insert(9, DiagnosticSign::Warning);
+diagnostics.insert(4, Diagnostic {
+    severity: DiagnosticSeverity::Error,
+    message: Some("expected `;`".into()),
+});
+diagnostics.insert(9, Diagnostic {
+    severity: DiagnosticSeverity::Warning,
+    message: Some("unused variable `y`".into()),
+});
 
 editor.gutter = Some(GutterConfig {
     signs,
@@ -38,14 +45,24 @@ editor.gutter = Some(GutterConfig {
 // Renders as:
 //      1  use std::io;
 //      3 │fn main() {
-// ✘    5 │    let x = todo!();
+// ✘    5 │    let x = todo!();   ← command line shows: "expected `;`"
 //      6      ...
-// ⚠   10      let y = 42;
+// ⚠   10      let y = 42;       ← command line shows: "unused variable `y`"
 ```
+
+- **Diagnostic navigation (`]d` / `[d`)** — jump to the next/previous line with a diagnostic. Wraps around at the end/beginning of the file.
+
+- **`EditorAction::GoToDefinition` (`gd`)** — returns an action for the consumer to implement go-to-definition navigation.
+
+- **`EditorAction::Hover` (`K`)** — returns an action for the consumer to implement hover/documentation display.
+
+- **Marks (`m` + char, `'` + char, `` ` `` + char)** — set named marks with `ma`..`mz`, jump to mark line with `'a`, jump to exact position with `` `a ``. Marks are local to each editor instance.
+
+- **Macro recording and playback (`q` + char, `@` + char, `@@`)** — record a key sequence with `qa`..`qz`, stop with `q`, replay with `@a`. `@@` replays the last used macro. The command line shows `recording @a` while recording.
 
 ### Changed
 
-- **`GutterSign::Error` / `Warning` moved to `DiagnosticSign`** — the `GutterSign` enum now only contains diff variants (`Added`, `Modified`, `DeletedAbove`, `DeletedBelow`). Diagnostic indicators use the new `DiagnosticSign` enum via `GutterConfig::diagnostics`.
+- **`DiagnosticSign` renamed to `Diagnostic` struct** — diagnostics now use `Diagnostic { severity: DiagnosticSeverity, message: Option<String> }` instead of a plain enum. `DiagnosticSeverity` replaces the old `DiagnosticSign` enum.
 
 - **Render module refactored into submodules** — `render.rs` split into `render/mod.rs` (orchestration), `render/gutter.rs` (sign column + line numbers), and `render/highlight.rs` (visual, search, yank, preview highlighting). No public API changes to `render()` / `render_with_options()`.
 
