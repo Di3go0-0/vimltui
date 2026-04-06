@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-04-06
+
+### Added
+
+- **Diagnostic sign column (`DiagnosticSign` enum)** — new `DiagnosticSign` enum (`Error`, `Warning`) rendered to the LEFT of the line number. When `GutterConfig::diagnostics` is non-empty, the gutter reserves 2 extra characters for the `[icon][space]` prefix. Diagnostic color takes priority for the line number.
+  - `DiagnosticSign::Error` → red `✘`
+  - `DiagnosticSign::Warning` → yellow `⚠`
+  - Colors customizable via `GutterConfig::sign_error` / `sign_warning`.
+
+- **Separate gutter layout for diff signs vs diagnostics** — diff signs (`GutterSign::Added`, `Modified`, `DeletedAbove`, `DeletedBelow`) render to the RIGHT of the number. Diagnostics render to the LEFT. Both can coexist on the same line.
+
+  Full layout: `[diagnostic?][space?][number][space][diff_sign?]`
+
+```rust
+use std::collections::HashMap;
+use vimltui::{GutterConfig, GutterSign, DiagnosticSign};
+
+let mut signs = HashMap::new();
+signs.insert(2, GutterSign::Added);
+signs.insert(4, GutterSign::Modified);
+
+let mut diagnostics = HashMap::new();
+diagnostics.insert(4, DiagnosticSign::Error);
+diagnostics.insert(9, DiagnosticSign::Warning);
+
+editor.gutter = Some(GutterConfig {
+    signs,
+    diagnostics,
+    ..Default::default()
+});
+// Renders as:
+//      1  use std::io;
+//      3 │fn main() {
+// ✘    5 │    let x = todo!();
+//      6      ...
+// ⚠   10      let y = 42;
+```
+
+### Changed
+
+- **`GutterSign::Error` / `Warning` moved to `DiagnosticSign`** — the `GutterSign` enum now only contains diff variants (`Added`, `Modified`, `DeletedAbove`, `DeletedBelow`). Diagnostic indicators use the new `DiagnosticSign` enum via `GutterConfig::diagnostics`.
+
+- **Render module refactored into submodules** — `render.rs` split into `render/mod.rs` (orchestration), `render/gutter.rs` (sign column + line numbers), and `render/highlight.rs` (visual, search, yank, preview highlighting). No public API changes to `render()` / `render_with_options()`.
+
 ## [0.1.8] - 2026-04-06
 
 ### Added
