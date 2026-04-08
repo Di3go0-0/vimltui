@@ -7,16 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-04-07
 
+### Added
+
+- **Marks gutter column** — when at least one mark is set, a new 1-character column is prepended to the left of the existing gutter (mark → diagnostic icon → line number → diff sign). The mark's letter is rendered in the accent color on the line it points to. The column vanishes the moment the marks map is empty, so consumers that never use marks see **no layout change** at all. This is purely a render-time addition — no public API changed, no `GutterConfig` field added, and the mark state was already tracked in the `marks` HashMap since 0.1.9. When multiple marks land on the same line, the alphabetically-first character is shown.
+
 ### Fixed
 
 - **`m{A-Z}` (uppercase marks) silently ignored** — `pending_mark` only accepted `is_ascii_lowercase`, so `mA`/`mB`/etc. did nothing. Now accepts any ASCII letter (`is_ascii_alphabetic`).
 
-- **`Ctrl+d` and `Ctrl+e` produced nearly identical movement on small viewports** — `scroll_line_down`/`scroll_line_up` had a workaround that pushed the cursor by `SCROLLOFF` (3 lines) to keep `ensure_cursor_visible` from undoing the viewport shift. On viewports of 8–10 rows (common in dbtui split panes), that push made `Ctrl+e` move the cursor almost as much as `Ctrl+d`. Symmetrically, `half_page_down` was being clawed back by scrolloff so `Ctrl+d` moved less than expected.
+- **`Ctrl+d` wasted the bottom half of the screen at EOF** — `half_page_down` capped the scroll at `lines.len() - 1`, which let the last line float up to the top of the viewport and filled the rest with `~` tildes long before the cursor reached the end of the file. The scroll cap is now `lines.len() - visible_height`, so the last line stops exactly at the bottom of the viewport; from there, only the cursor keeps advancing by half-page until it reaches the last line. The screen stays full of real content during fast traversal.
 
-  Introduced a `skip_next_visible` flag set by all viewport-scroll commands (`Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b`); `handle_key` honors it and skips the scrolloff-based pull-back exactly once. The scroll commands now match Vim:
-  - `Ctrl+e` / `Ctrl+y` shift the viewport by 1 line; the cursor stays on its absolute line and only follows if it would scroll off-screen.
-  - `Ctrl+d` / `Ctrl+u` move cursor and viewport by half a page in lockstep.
-  - `Ctrl+f` / `Ctrl+b` move cursor and viewport by a full page in lockstep.
+- **`Ctrl+e` "bounced" near the end of the file** — `scroll_line_down` ran `ensure_cursor_visible` after the early-return path without setting the skip flag, so `SCROLLOFF` (3 lines) would snap the scroll back as soon as the last line got close to the top of the viewport. The flag is now set unconditionally on every `Ctrl+e` press, and the scroll cap was lowered to `lines.len() - 3` so the last line can be lifted up to screen row 2 at most — two rows always remain above it. This matches the "lift the line I'm writing on" workflow at EOF without any visual snap-back.
 
 ## [0.1.9] - 2026-04-06
 
