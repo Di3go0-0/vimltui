@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-07
+
+### Fixed
+
+- **`m{A-Z}` (uppercase marks) silently ignored** — `pending_mark` only accepted `is_ascii_lowercase`, so `mA`/`mB`/etc. did nothing. Now accepts any ASCII letter (`is_ascii_alphabetic`).
+
+- **`Ctrl+d` and `Ctrl+e` produced nearly identical movement on small viewports** — `scroll_line_down`/`scroll_line_up` had a workaround that pushed the cursor by `SCROLLOFF` (3 lines) to keep `ensure_cursor_visible` from undoing the viewport shift. On viewports of 8–10 rows (common in dbtui split panes), that push made `Ctrl+e` move the cursor almost as much as `Ctrl+d`. Symmetrically, `half_page_down` was being clawed back by scrolloff so `Ctrl+d` moved less than expected.
+
+  Introduced a `skip_next_visible` flag set by all viewport-scroll commands (`Ctrl+e`, `Ctrl+y`, `Ctrl+d`, `Ctrl+u`, `Ctrl+f`, `Ctrl+b`); `handle_key` honors it and skips the scrolloff-based pull-back exactly once. The scroll commands now match Vim:
+  - `Ctrl+e` / `Ctrl+y` shift the viewport by 1 line; the cursor stays on its absolute line and only follows if it would scroll off-screen.
+  - `Ctrl+d` / `Ctrl+u` move cursor and viewport by half a page in lockstep.
+  - `Ctrl+f` / `Ctrl+b` move cursor and viewport by a full page in lockstep.
+
 ## [0.1.9] - 2026-04-06
 
 ### Added
