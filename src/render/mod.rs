@@ -1,10 +1,12 @@
 mod gutter;
 pub mod highlight;
 
+use std::collections::HashMap;
+
 use crossterm::cursor::SetCursorStyle;
 use crossterm::ExecutableCommand;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
@@ -66,12 +68,35 @@ pub fn render_with_options(
     let full_width = inner.width as usize;
     let bg_style = Style::default().bg(theme.editor_bg);
 
+    // Marks gutter (leftmost, 1 char). Only active while at least one mark
+    // is set — the column disappears when the map is empty so the layout
+    // matches pre-marks rendering for consumers that never touch marks.
+    let has_marks = !editor.marks.is_empty();
+    let line_to_mark: HashMap<usize, char> = if has_marks {
+        let mut entries: Vec<(char, usize)> = editor
+            .marks
+            .iter()
+            .map(|(c, (r, _))| (*c, *r))
+            .collect();
+        // Stable ordering so repeated frames always pick the same letter
+        // when several marks share a line.
+        entries.sort_by_key(|(c, _)| *c);
+        let mut m = HashMap::new();
+        for (ch, row) in entries {
+            m.entry(row).or_insert(ch);
+        }
+        m
+    } else {
+        HashMap::new()
+    };
+    let mark_col_width: usize = if has_marks { 1 } else { 0 };
+
     // Gutter metrics
     let line_count_width = format!("{}", editor.lines.len()).len().max(3);
     let gutter_cfg = editor.gutter.as_ref();
     let has_diagnostics = gutter_cfg.is_some_and(|g| !g.diagnostics.is_empty());
     let has_diff_signs = gutter_cfg.is_some_and(|g| !g.signs.is_empty());
-    let num_col_width = gutter::width(line_count_width, has_diagnostics);
+    let num_col_width = mark_col_width + gutter::width(line_count_width, has_diagnostics);
     let available_text_width = full_width.saturating_sub(num_col_width);
 
     // Visual selection
@@ -117,7 +142,11 @@ pub fn render_with_options(
 
         // Past end-of-file: tilde line
         if line_idx >= display_lines.len() {
-            let mut spans = gutter::render_tilde(line_count_width, has_diagnostics, theme, bg_style);
+            let mut spans: Vec<Span> = Vec::new();
+            if has_marks {
+                spans.push(Span::styled(" ", bg_style));
+            }
+            spans.extend(gutter::render_tilde(line_count_width, has_diagnostics, theme, bg_style));
             pad_to_width(&mut spans, num_col_width, full_width, bg_style);
             rendered_lines.push(Line::from(spans));
             continue;
@@ -126,8 +155,21 @@ pub fn render_with_options(
         let is_cursor_line = line_idx == editor.cursor_row && focused;
         let render_text: &str = cached.as_deref().unwrap_or(&display_lines[line_idx]);
 
+        // Mark column (leftmost)
+        let mut spans: Vec<Span> = Vec::new();
+        if has_marks {
+            if let Some(&mc) = line_to_mark.get(&line_idx) {
+                spans.push(Span::styled(
+                    mc.to_string(),
+                    Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
+                ));
+            } else {
+                spans.push(Span::styled(" ", bg_style));
+            }
+        }
+
         // Gutter spans
-        let mut spans: Vec<Span> = if let Some(g) = gutter_cfg {
+        let gutter_spans: Vec<Span> = if let Some(g) = gutter_cfg {
             gutter::render_line(
                 line_idx,
                 editor.cursor_row,
@@ -154,6 +196,7 @@ pub fn render_with_options(
             };
             vec![Span::styled(line_num, num_style)]
         };
+        spans.extend(gutter_spans);
 
         // Content spans (highlighting)
         let line_visual = highlight::compute_visual(
