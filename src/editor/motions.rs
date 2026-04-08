@@ -68,10 +68,16 @@ impl VimEditor {
     // --- Scroll ---
 
     pub fn half_page_down(&mut self) {
+        // Vim Ctrl+d: advance cursor by half-page. While the last line is
+        // still below the viewport, the scroll moves with the cursor (so the
+        // cursor keeps its on-screen row). Once the last line fits on screen,
+        // the scroll caps and the cursor alone keeps advancing until it
+        // reaches the last line — the viewport never shows tildes below.
         let half = self.visible_height / 2;
-        let max = self.lines.len().saturating_sub(1);
-        self.scroll_offset = (self.scroll_offset + half).min(max);
-        self.cursor_row = (self.cursor_row + half).min(max);
+        let last_line = self.lines.len().saturating_sub(1);
+        let max_scroll = self.lines.len().saturating_sub(self.visible_height);
+        self.scroll_offset = (self.scroll_offset + half).min(max_scroll);
+        self.cursor_row = (self.cursor_row + half).min(last_line);
         self.clamp_cursor();
         self.skip_next_visible = true;
     }
@@ -81,16 +87,13 @@ impl VimEditor {
         self.scroll_offset = self.scroll_offset.saturating_sub(half);
         self.cursor_row = self.cursor_row.saturating_sub(half);
         self.clamp_cursor();
-        self.skip_next_visible = true;
     }
 
     pub fn full_page_down(&mut self) {
         let page = self.visible_height;
-        let max = self.lines.len().saturating_sub(1);
-        self.scroll_offset = (self.scroll_offset + page).min(max);
-        self.cursor_row = (self.cursor_row + page).min(max);
+        self.scroll_offset = self.scroll_offset.saturating_add(page);
+        self.cursor_row = (self.cursor_row + page).min(self.lines.len().saturating_sub(1));
         self.clamp_cursor();
-        self.skip_next_visible = true;
     }
 
     pub fn full_page_up(&mut self) {
@@ -98,16 +101,20 @@ impl VimEditor {
         self.scroll_offset = self.scroll_offset.saturating_sub(page);
         self.cursor_row = self.cursor_row.saturating_sub(page);
         self.clamp_cursor();
-        self.skip_next_visible = true;
     }
 
     pub fn scroll_line_down(&mut self) {
-        // Vim Ctrl+e: shift viewport down by 1 line, leave cursor on its
-        // absolute line. If the cursor would scroll off the top of the
-        // viewport, drag it down by exactly 1 (so its screen position is
-        // unchanged in the worst case).
-        let max = self.lines.len().saturating_sub(1);
-        if self.scroll_offset >= max {
+        // Vim-ish Ctrl+e: shift viewport down by 1 line, cursor stays on its
+        // absolute line (only pushed when the top edge reaches it).
+        //
+        // Cap: the last line must stay at screen row >= 2 (two rows always
+        // remain above it). This prevents the snap-back "bounce" caused by
+        // scrolloff once the last line would otherwise end up at the very
+        // top of the viewport. `skip_next_visible` is set unconditionally so
+        // `ensure_cursor_visible` never pulls the scroll back.
+        let max_scroll = self.lines.len().saturating_sub(3);
+        self.skip_next_visible = true;
+        if self.scroll_offset >= max_scroll {
             return;
         }
         self.scroll_offset += 1;
@@ -115,23 +122,17 @@ impl VimEditor {
             self.cursor_row = self.scroll_offset;
             self.clamp_cursor();
         }
-        self.skip_next_visible = true;
     }
 
     pub fn scroll_line_up(&mut self) {
-        // Vim Ctrl+y: shift viewport up by 1 line, leave cursor on its
-        // absolute line. If the cursor would scroll off the bottom of the
-        // viewport, drag it up by exactly 1.
-        if self.scroll_offset == 0 {
-            return;
-        }
-        self.scroll_offset -= 1;
-        let bottom = self.scroll_offset + self.visible_height.saturating_sub(1);
-        if self.cursor_row > bottom {
-            self.cursor_row = bottom;
+        self.scroll_offset = self.scroll_offset.saturating_sub(1);
+        // Push cursor up to respect scrolloff so ensure_cursor_visible doesn't undo the scroll
+        let scrolloff = crate::SCROLLOFF.min(self.visible_height / 2);
+        let max_cursor = (self.scroll_offset + self.visible_height).saturating_sub(scrolloff + 1);
+        if self.cursor_row > max_cursor {
+            self.cursor_row = max_cursor.min(self.lines.len().saturating_sub(1));
             self.clamp_cursor();
         }
-        self.skip_next_visible = true;
     }
 
     pub fn scroll_center(&mut self) {
