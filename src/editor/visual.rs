@@ -243,7 +243,8 @@ impl VimEditor {
         }
     }
 
-    /// Indent visual selection
+    /// Indent visual selection. Selection is preserved so the user can press
+    /// `>` repeatedly to indent multiple levels without losing visual mode.
     pub fn visual_indent(&mut self) {
         if let Some(((sr, _), (er, _))) = self.visual_range() {
             self.save_undo();
@@ -251,11 +252,11 @@ impl VimEditor {
             for row in sr..=end {
                 self.indent_line(row);
             }
-            self.exit_visual();
         }
     }
 
-    /// Dedent visual selection
+    /// Dedent visual selection. Selection is preserved so the user can press
+    /// `<` repeatedly to dedent multiple levels without losing visual mode.
     pub fn visual_dedent(&mut self) {
         if let Some(((sr, _), (er, _))) = self.visual_range() {
             self.save_undo();
@@ -263,7 +264,6 @@ impl VimEditor {
             for row in sr..=end {
                 self.dedent_line(row);
             }
-            self.exit_visual();
         }
     }
 

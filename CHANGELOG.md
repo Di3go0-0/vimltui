@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-04-08
+
+### Changed
+
+- **Visual `>` / `<` keep the selection active** — `visual_indent` and `visual_dedent` no longer call `exit_visual()` after applying the operation, so pressing `>` (or `<`) repeatedly indents/dedents the same selection by one level each time without re-entering visual mode. This deviates from stock Vim (which exits visual mode after `>`/`<` and forces a `gv` to reselect), but matches the way users actually use these keys: hold the selection, tap `>` until it's at the right indent level, then `Esc`. No public API change — the function signatures are identical; only the behavior of the existing methods changed.
+
 ## [0.2.0] - 2026-04-07
 
 ### Added
