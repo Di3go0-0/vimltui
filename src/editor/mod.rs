@@ -23,6 +23,10 @@ pub struct VimEditor {
     // Scroll
     pub scroll_offset: usize,
     pub visible_height: usize,
+    /// When true, the next `ensure_cursor_visible()` call is skipped.
+    /// Set by viewport-scroll commands (Ctrl-e/y, Ctrl-d/u, Ctrl-f/b) so the
+    /// scrolloff-based pull-back doesn't undo a deliberate viewport shift.
+    pub skip_next_visible: bool,
 
     // Undo/Redo
     pub undo_stack: Vec<Snapshot>,
@@ -110,6 +114,7 @@ impl VimEditor {
             config,
             scroll_offset: 0,
             visible_height: 20,
+            skip_next_visible: false,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             unnamed_register: Register::default(),

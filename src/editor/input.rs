@@ -57,7 +57,11 @@ impl VimEditor {
         };
 
         self.update_command_line();
-        self.ensure_cursor_visible();
+        if self.skip_next_visible {
+            self.skip_next_visible = false;
+        } else {
+            self.ensure_cursor_visible();
+        }
         action
     }
 
@@ -410,7 +414,7 @@ impl VimEditor {
         if self.pending_mark {
             self.pending_mark = false;
             if let KeyCode::Char(c) = key.code {
-                if c.is_ascii_lowercase() {
+                if c.is_ascii_alphabetic() {
                     self.marks.insert(c, (self.cursor_row, self.cursor_col));
                 }
             }
