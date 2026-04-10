@@ -116,16 +116,36 @@ pub fn render_with_options(
     }
     let yank_highlight = editor.yank_highlight.clone();
 
+    // Matching bracket
+    let match_bracket = if matches!(editor.mode, VimMode::Normal | VimMode::Visual(_)) {
+        highlight::find_matching_bracket(&editor.lines, editor.cursor_row, editor.cursor_col)
+    } else {
+        None
+    };
+
+    // Horizontal scroll: keep cursor visible within available_text_width
+    if editor.cursor_col >= editor.horizontal_scroll + available_text_width {
+        editor.horizontal_scroll = editor.cursor_col.saturating_sub(available_text_width) + 1;
+    } else if editor.cursor_col < editor.horizontal_scroll {
+        editor.horizontal_scroll = editor.cursor_col;
+    }
+    let hscroll = editor.horizontal_scroll;
+    // Snap hscroll to char boundary once (used for all lines in the loop)
+    // Each line may have different char boundaries, so we snap per-line below.
+
     let display_lines = editor.preview_lines.as_ref().unwrap_or(&editor.lines);
 
-    // Pre-truncate wide lines
-    let truncated_cache: Vec<Option<String>> = (0..content_height)
+    // Pre-slice lines for horizontal scroll + truncation.
+    // Each entry is Some((sliced_string, bytes_skipped)) when slicing was needed.
+    let sliced_cache: Vec<Option<(String, usize)>> = (0..content_height)
         .map(|sr| {
             let idx = editor.scroll_offset + sr;
             if idx < display_lines.len() {
-                let tw = UnicodeWidthStr::width(display_lines[idx].as_str());
-                if tw > available_text_width {
-                    Some(truncate_to_width(&display_lines[idx], available_text_width))
+                let full_line = &display_lines[idx];
+                if hscroll > 0 || UnicodeWidthStr::width(full_line.as_str()) > available_text_width {
+                    let skip = snap_to_char_boundary(full_line, hscroll);
+                    let sliced = &full_line[skip..];
+                    Some((truncate_to_width(sliced, available_text_width), skip))
                 } else {
                     None
                 }
@@ -137,7 +157,7 @@ pub fn render_with_options(
 
     let mut rendered_lines: Vec<Line> = Vec::with_capacity(content_height);
 
-    for (screen_row, cached) in truncated_cache.iter().enumerate() {
+    for (screen_row, cached) in sliced_cache.iter().enumerate() {
         let line_idx = editor.scroll_offset + screen_row;
 
         // Past end-of-file: tilde line
@@ -153,7 +173,10 @@ pub fn render_with_options(
         }
 
         let is_cursor_line = line_idx == editor.cursor_row && focused;
-        let render_text: &str = cached.as_deref().unwrap_or(&display_lines[line_idx]);
+        let (render_text, bytes_skipped): (&str, usize) = match cached {
+            Some((s, skip)) => (s.as_str(), *skip),
+            None => (display_lines[line_idx].as_str(), 0),
+        };
 
         // Mark column (leftmost)
         let mut spans: Vec<Span> = Vec::new();
@@ -198,36 +221,70 @@ pub fn render_with_options(
         };
         spans.extend(gutter_spans);
 
-        // Content spans (highlighting)
-        let line_visual = highlight::compute_visual(
+        // Content spans (highlighting) — built separately for bracket overlay
+        let mut content_spans: Vec<Span> = Vec::new();
+
+        // Adjust positions for horizontal scroll
+        let adj = |pos: usize| -> usize { pos.saturating_sub(bytes_skipped) };
+
+        let line_visual: Option<(usize, usize)> = highlight::compute_visual(
             line_idx,
             render_text.len(),
             &visual_range,
             &visual_kind,
-        );
-        let line_yank = highlight::compute_yank(line_idx, render_text.len(), &yank_highlight);
+        ).map(|(vs, ve)| (adj(vs), adj(ve)));
+        let line_yank = highlight::compute_yank(line_idx, render_text.len(), &yank_highlight)
+            .map(|(ys, ye)| (adj(ys), adj(ye)));
         let line_preview_hl: Vec<(usize, usize)> = editor
             .preview_highlights
             .iter()
             .filter(|(r, _, _)| *r == line_idx)
-            .map(|(_, s, e)| (*s, *e))
+            .map(|(_, s, e)| (adj(*s), adj(*e)))
             .collect();
         let search_pattern = &editor.search.pattern;
 
         if let Some((vs, ve)) = line_visual {
-            highlight::render_visual(render_text, vs, ve, theme, highlighter, &mut spans);
+            highlight::render_visual(render_text, vs, ve, theme, highlighter, &mut content_spans);
         } else if !line_preview_hl.is_empty() {
-            highlight::render_preview(render_text, &line_preview_hl, theme, highlighter, &mut spans);
+            highlight::render_preview(render_text, &line_preview_hl, theme, highlighter, &mut content_spans);
         } else if let Some((ys, ye)) = line_yank {
-            highlight::render_yank(render_text, ys, ye, theme, highlighter, &mut spans);
+            highlight::render_yank(render_text, ys, ye, theme, highlighter, &mut content_spans);
         } else if !search_pattern.is_empty() {
             highlight::render_search(
-                render_text, line_idx, editor.cursor_row, editor.cursor_col,
-                search_pattern, theme, highlighter, &mut spans,
+                render_text, line_idx, editor.cursor_row, adj(editor.cursor_col),
+                search_pattern, theme, highlighter, &mut content_spans,
             );
+        } else if bytes_skipped > 0 {
+            // Highlight the FULL line so the highlighter sees context (e.g. `--`
+            // for comments), then trim spans to the visible portion.
+            let full_line = &display_lines[line_idx];
+            let mut full_spans: Vec<Span> = Vec::new();
+            highlighter.highlight_line(full_line, &mut full_spans);
+            trim_spans_to_range(&mut content_spans, &full_spans, full_line, bytes_skipped, render_text.len());
         } else {
-            highlighter.highlight_line(render_text, &mut spans);
+            highlighter.highlight_line(render_text, &mut content_spans);
         }
+
+        // Bracket match overlay on content spans only (no gutter interference)
+        if let Some((mr, mc)) = match_bracket {
+            let bracket_style = Style::default()
+                .bg(theme.match_bracket_bg)
+                .fg(theme.match_bracket_fg)
+                .add_modifier(Modifier::BOLD);
+            if line_idx == mr {
+                highlight::overlay_bracket_match(&mut content_spans, render_text, adj(mc), bracket_style);
+            }
+            if line_idx == editor.cursor_row {
+                highlight::overlay_bracket_match(
+                    &mut content_spans,
+                    render_text,
+                    adj(editor.cursor_col),
+                    bracket_style,
+                );
+            }
+        }
+
+        spans.extend(content_spans);
 
         // Pad to full width
         let used = num_col_width + UnicodeWidthStr::width(render_text);
@@ -235,10 +292,10 @@ pub fn render_with_options(
             spans.push(Span::styled(" ".repeat(full_width - used), bg_style));
         }
 
-        // Cursor position
+        // Cursor position (adjusted for horizontal scroll)
         if is_cursor_line && focused {
             frame.set_cursor_position(ratatui::layout::Position {
-                x: inner.x + (num_col_width + editor.cursor_col) as u16,
+                x: inner.x + (num_col_width + adj(editor.cursor_col)) as u16,
                 y: inner.y + screen_row as u16,
             });
         }
@@ -357,4 +414,60 @@ fn truncate_to_width(s: &str, max_width: usize) -> String {
         end = i + c.len_utf8();
     }
     s[..end].to_string()
+}
+
+/// Extract the visible portion of full-line spans into `out`.
+///
+/// `full_spans` are spans produced from the full line. This function walks
+/// them, skips the first `skip_bytes` bytes, and collects up to `visible_len`
+/// bytes of content, preserving the style of each span.
+fn trim_spans_to_range<'a>(
+    out: &mut Vec<Span<'a>>,
+    full_spans: &[Span<'a>],
+    full_line: &'a str,
+    skip_bytes: usize,
+    visible_len: usize,
+) {
+    let mut byte_pos: usize = 0;
+    let end = skip_bytes + visible_len;
+
+    for span in full_spans {
+        let span_start = byte_pos;
+        let span_end = byte_pos + span.content.len();
+        byte_pos = span_end;
+
+        // Entirely before visible range
+        if span_end <= skip_bytes {
+            continue;
+        }
+        // Entirely after visible range
+        if span_start >= end {
+            break;
+        }
+
+        // Compute the overlap with [skip_bytes, end)
+        let vis_start = span_start.max(skip_bytes);
+        let vis_end = span_end.min(end);
+
+        // Map to offsets within the full_line
+        if vis_start < vis_end && vis_start < full_line.len() {
+            let s = snap_to_char_boundary(full_line, vis_start);
+            let e = snap_to_char_boundary(full_line, vis_end);
+            if s < e {
+                out.push(Span::styled(&full_line[s..e], span.style));
+            }
+        }
+    }
+}
+
+/// Snap a byte index to the nearest valid char boundary at or before `idx`.
+fn snap_to_char_boundary(s: &str, idx: usize) -> usize {
+    if idx >= s.len() {
+        return s.len();
+    }
+    let mut i = idx;
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }

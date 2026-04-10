@@ -22,6 +22,7 @@ pub struct VimEditor {
 
     // Scroll
     pub scroll_offset: usize,
+    pub horizontal_scroll: usize,
     pub visible_height: usize,
     /// When true, the next `ensure_cursor_visible()` call is skipped once.
     /// Set by viewport-scroll commands (Ctrl-d, Ctrl-e) so the scrolloff
@@ -113,6 +114,7 @@ impl VimEditor {
             mode: VimMode::Normal,
             config,
             scroll_offset: 0,
+            horizontal_scroll: 0,
             visible_height: 20,
             skip_next_visible: false,
             undo_stack: Vec::new(),

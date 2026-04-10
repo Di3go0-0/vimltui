@@ -381,6 +381,10 @@ pub struct VimTheme {
     pub yank_highlight_bg: Color,
     /// Background for live substitution replacement preview.
     pub substitute_preview_bg: Color,
+    /// Background for matching bracket highlight.
+    pub match_bracket_bg: Color,
+    /// Foreground for matching bracket highlight.
+    pub match_bracket_fg: Color,
 }
 
 /// Trait for language-specific syntax highlighting.
