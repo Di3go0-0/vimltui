@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-04-09
+
+### Added
+
+- **Bracket matching highlight** — in Normal and Visual modes, when the cursor is on `(`, `)`, `[`, `]`, `{`, or `}`, both the bracket under the cursor and its matching pair are highlighted. New `match_bracket_bg` and `match_bracket_fg` fields in `VimTheme`.
+
+- **Horizontal scrolling** — long lines now scroll horizontally to keep the cursor visible instead of being truncated. New `horizontal_scroll` field on `VimEditor`. The viewport shifts automatically as the cursor moves past the right or left edge.
+
+### Fixed
+
+- **UTF-8 panic in highlight rendering** — string slicing in `render_range`, `render_search`, and `render_preview` could panic on multi-byte characters (e.g., `ÁÉÍÓÚáéíóú`). All slice operations now snap to char boundaries via `floor_char_boundary` / `ceil_char_boundary`. Search highlighting rewrote to match directly on the original string instead of relying on `to_lowercase()` byte offsets.
+
+- **Visual paste with multi-line content** — `visual_paste` used `insert_str` which jammed multi-line content into a single line. Now correctly splits at newlines: first line merges with the current line, middle lines are inserted, last line joins with the remainder.
+
+- **`gg` in Visual mode** — pressing `gg` in Visual mode did nothing because the `pending_g` handler only recognized `gc` (block comment). Now `gg` correctly moves to the top of the file while extending the selection.
+
+- **Syntax highlighting preserved during horizontal scroll** — when the `--` comment prefix was scrolled off-screen, the visible text lost its comment styling. The renderer now highlights the full line and trims spans to the visible range.
+
 ## [0.2.1] - 2026-04-08
 
 ### Changed
