@@ -1510,17 +1510,24 @@ impl VimEditor {
     fn handle_visual(&mut self, key: KeyEvent) -> EditorAction {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
 
-        // Handle pending g → gc for block comment in visual mode
+        // Handle pending g → gg (go to top) or gc (block comment) in visual mode
         if self.pending_g {
             self.pending_g = false;
-            if key.code == KeyCode::Char('c') {
-                if let Some(((sr, _), (er, _))) = self.visual_range() {
-                    self.exit_visual();
-                    return EditorAction::ToggleBlockComment {
-                        start_row: sr,
-                        end_row: er,
-                    };
+            match key.code {
+                KeyCode::Char('g') => {
+                    self.move_to_top();
+                    return EditorAction::Handled;
                 }
+                KeyCode::Char('c') => {
+                    if let Some(((sr, _), (er, _))) = self.visual_range() {
+                        self.exit_visual();
+                        return EditorAction::ToggleBlockComment {
+                            start_row: sr,
+                            end_row: er,
+                        };
+                    }
+                }
+                _ => {}
             }
             return EditorAction::Handled;
         }
