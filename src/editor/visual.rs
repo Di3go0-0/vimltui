@@ -236,8 +236,31 @@ impl VimEditor {
                 self.cursor_col = 0;
             } else {
                 let col = self.cursor_col.min(self.lines[self.cursor_row].len());
-                self.lines[self.cursor_row].insert_str(col, &paste_reg.content);
-                self.cursor_col = col + paste_reg.content.len().saturating_sub(1);
+                let paste_lines: Vec<&str> = paste_reg.content.split('\n').collect();
+                if paste_lines.len() <= 1 {
+                    // Single-line paste
+                    self.lines[self.cursor_row].insert_str(col, &paste_reg.content);
+                    self.cursor_col = col + paste_reg.content.len().saturating_sub(1);
+                } else {
+                    // Multi-line paste: split current line and interleave
+                    let after = self.lines[self.cursor_row][col..].to_string();
+                    self.lines[self.cursor_row].truncate(col);
+                    self.lines[self.cursor_row].push_str(paste_lines[0]);
+
+                    let row = self.cursor_row;
+                    for (i, &pl) in paste_lines.iter().enumerate().skip(1) {
+                        if i == paste_lines.len() - 1 {
+                            // Last line: append the remainder of the original line
+                            let mut last = pl.to_string();
+                            last.push_str(&after);
+                            self.lines.insert(row + i, last);
+                            self.cursor_row = row + i;
+                            self.cursor_col = pl.len().saturating_sub(1);
+                        } else {
+                            self.lines.insert(row + i, pl.to_string());
+                        }
+                    }
+                }
             }
             self.modified = true;
         }
